@@ -15,8 +15,6 @@ Uso:
     python3 scripts/placar.py --json dados.json  # dados crus
 """
 
-from __future__ import annotations
-
 import argparse
 import datetime as dt
 import gzip
@@ -33,6 +31,9 @@ import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+# Anotações via typing, e não list[...]/X | Y, para rodar no Python 3.6 que vem
+# de fábrica no RHEL 8 — lá /usr/bin/python3 ainda é o 3.6.
+from typing import Dict, List, Optional, Tuple
 
 API = "https://www.waze.com/_user/api/leaderboard"
 UA = (
@@ -65,6 +66,14 @@ _last_call = [0.0]
 
 # --------------------------------------------------------------------------- rede
 
+def _unlink(path: Path) -> None:
+    """Path.unlink(missing_ok=...) só chegou no 3.8."""
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        pass
+
+
 def load_opener(cookie_path: str) -> urllib.request.OpenerDirector:
     """Abre a sessão a partir de um arquivo de cookies no formato Netscape."""
     path = Path(cookie_path)
@@ -83,7 +92,7 @@ def load_opener(cookie_path: str) -> urllib.request.OpenerDirector:
         os.chmod(tmp, 0o600)
         jar.load(str(tmp), ignore_discard=True, ignore_expires=True)
     finally:
-        tmp.unlink(missing_ok=True)
+        _unlink(tmp)
 
     if not any(c.name == "_web_session" for c in jar):
         sys.exit(
@@ -93,7 +102,7 @@ def load_opener(cookie_path: str) -> urllib.request.OpenerDirector:
     return urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
 
 
-def fetch(opener, params: dict, attempts: int = 4) -> dict | None:
+def fetch(opener, params: dict, attempts: int = 4) -> Optional[dict]:
     """Um GET, com throttle e backoff exponencial. None = desistiu."""
     url = f"{API}?{urllib.parse.urlencode(params)}"
     for attempt in range(attempts):
@@ -125,7 +134,10 @@ def fetch(opener, params: dict, attempts: int = 4) -> dict | None:
                 print(f"  ! desisti de {params}: {exc}", file=sys.stderr)
                 return None
             time.sleep((2 ** attempt) + random.random())
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+        # OSError cobre URLError, socket.timeout e queda de conexão. No 3.6
+        # socket.timeout ainda não é TimeoutError, então pegar OSError é o que
+        # funciona em todas as versões.
+        except (OSError, json.JSONDecodeError) as exc:
             if attempt == attempts - 1:
                 print(f"  ! desisti de {params}: {exc}", file=sys.stderr)
                 return None
@@ -135,19 +147,20 @@ def fetch(opener, params: dict, attempts: int = 4) -> dict | None:
 
 # ------------------------------------------------------------------------ coleta
 
-def collect(opener, period: str, quiet: bool = False) -> tuple[list[dict], list[str]]:
+def collect(opener, period: str,
+            quiet: bool = False) -> Tuple[List[dict], List[str]]:
     """Varre o ranking nacional e os 27 estaduais.
 
     Devolve os editores e a lista dos rankings que não responderam — publicar
     uma varredura incompleta por cima de uma boa seria pior que não publicar.
     """
     boards = [None] + UFS  # None = nacional
-    editors: dict[str, dict] = {}
-    failed: list[str] = []
+    editors: Dict[str, dict] = {}
+    failed: List[str] = []
     lock = threading.Lock()
     done = [0]
 
-    def work(uf: str | None) -> None:
+    def work(uf: Optional[str]) -> None:
         params = {
             "lookbackPeriod": period,
             "countryCode": "BR",
@@ -206,7 +219,7 @@ def collect(opener, period: str, quiet: bool = False) -> tuple[list[dict], list[
 
 # ------------------------------------------------------------------------- saída
 
-def print_table(rows: list[dict], period: str, top: int) -> None:
+def print_table(rows: List[dict], period: str, top: int) -> None:
     print(f"\n{PERIODS[period]} — {len(rows)} editores")
     print(f"{'#':>4}  {'edições':>9}  {'nv':>2}  {'UF':<2}  editor")
     for r in rows[:top]:
@@ -430,11 +443,11 @@ def write_atomic(path: Path, text: str) -> None:
         os.chmod(tmp, 0o644)
         os.replace(tmp, path)
     except BaseException:
-        tmp.unlink(missing_ok=True)
+        _unlink(tmp)
         raise
 
 
-def build_html(collected: dict[str, list[dict]], stamp: str) -> str:
+def build_html(collected: Dict[str, List[dict]], stamp: str) -> str:
     payload = {
         "periods": {
             period: {
@@ -485,8 +498,8 @@ def main() -> None:
     opener = load_opener(args.cookies)
     periods = args.period or list(PERIODS)
 
-    collected: dict[str, list[dict]] = {}
-    failures: list[str] = []
+    collected: Dict[str, List[dict]] = {}
+    failures: List[str] = []
     for period in periods:
         collected[period], failed = collect(opener, period, quiet=args.quiet)
         failures += failed

@@ -12,7 +12,8 @@ HTML autocontido que abre em qualquer lugar.
 
 ## Uso
 
-Precisa de Python 3.11+, nada além da biblioteca padrão. A autenticação é o
+Precisa de Python 3.6+, nada além da biblioteca padrão — roda no
+`/usr/bin/python3` de fábrica do RHEL 8, que ainda é o 3.6. A autenticação é o
 cookie de sessão de uma conta logada no `waze.com`, em formato Netscape —
 por padrão em `/tmp/cookies.txt`.
 
