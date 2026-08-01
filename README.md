@@ -26,6 +26,48 @@ python3 scripts/placar.py --cookies ~/cookies.txt --out /var/www/placar.html
 
 Uma execução completa são 84 requisições e leva ~40 s.
 
+## Rodando diariamente no cron
+
+```cron
+17 5 * * * /usr/bin/flock -n /tmp/waze-placar.lock /usr/bin/python3 /home/user/waze-placar/scripts/placar.py --out /var/www/waze-placar/index.html --quiet >> /var/log/waze-placar.log 2>&1
+```
+
+Caminhos absolutos porque o cron roda com um ambiente mínimo — sem `PATH` útil,
+sem as variáveis do shell de login. O `flock -n` evita dois processos ao mesmo
+tempo se um dia uma execução travar. O `--quiet` corta o progresso por ranking
+mas mantém o resumo, que é o que vale no log.
+
+Antes de agendar, rode uma vez na mão para confirmar cookie e permissão.
+
+### O que o script garante sozinho
+
+**Publicação atômica.** A página é escrita num temporário no mesmo diretório e
+só então renomeada por cima. Ninguém pega HTML pela metade, e o temporário fica
+ao lado do destino de propósito: um arquivo movido de `/tmp` carregaria o rótulo
+SELinux de lá e o httpd responderia 403.
+
+**Permissão explícita.** O arquivo sai `0644` mesmo se o cron rodar com umask
+restritiva — senão o httpd leva 403 num arquivo que existe.
+
+**Nada de página degradada.** Se algum dos 28 rankings não responder depois das
+tentativas, o script aborta com saída 1 e **não escreve nada** — a página do dia
+anterior continua no ar. O mesmo vale para cookie expirado: HTTP 401 encerra
+antes de tocar no destino. Para publicar mesmo incompleto, `--allow-partial`.
+
+### O que depende de você
+
+- **Cookies legíveis pelo usuário do cron.** Se você exporta como seu usuário
+  em modo 600 e o cron roda como root, tudo bem. Se roda como outro usuário,
+  ajuste dono ou modo do `/tmp/cookies.txt`.
+- **Contexto SELinux do diretório**, se ele foi criado à mão:
+
+  ```bash
+  sudo semanage fcontext -a -t httpd_sys_content_t "/var/www/waze-placar(/.*)?"
+  sudo restorecon -Rv /var/www/waze-placar
+  ```
+
+- **Rotação do log**, se `/var/log/waze-placar.log` incomodar com o tempo.
+
 ## O que o placar mostra
 
 Três abas, que são exatamente as três janelas que a API oferece:

@@ -93,8 +93,8 @@ def load_opener(cookie_path: str) -> urllib.request.OpenerDirector:
     return urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
 
 
-def fetch(opener, params: dict, attempts: int = 4) -> dict:
-    """Um GET, com throttle e backoff exponencial."""
+def fetch(opener, params: dict, attempts: int = 4) -> dict | None:
+    """Um GET, com throttle e backoff exponencial. None = desistiu."""
     url = f"{API}?{urllib.parse.urlencode(params)}"
     for attempt in range(attempts):
         with _throttle:
@@ -123,22 +123,27 @@ def fetch(opener, params: dict, attempts: int = 4) -> dict:
                 sys.exit(f"HTTP {exc.code} — sessão expirada. Atualize os cookies.")
             if attempt == attempts - 1:
                 print(f"  ! desisti de {params}: {exc}", file=sys.stderr)
-                return {"record": []}
+                return None
             time.sleep((2 ** attempt) + random.random())
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
             if attempt == attempts - 1:
                 print(f"  ! desisti de {params}: {exc}", file=sys.stderr)
-                return {"record": []}
+                return None
             time.sleep((2 ** attempt) + random.random())
-    return {"record": []}
+    return None
 
 
 # ------------------------------------------------------------------------ coleta
 
-def collect(opener, period: str, quiet: bool = False) -> list[dict]:
-    """Varre o ranking nacional e os 27 estaduais e devolve os editores."""
+def collect(opener, period: str, quiet: bool = False) -> tuple[list[dict], list[str]]:
+    """Varre o ranking nacional e os 27 estaduais.
+
+    Devolve os editores e a lista dos rankings que não responderam — publicar
+    uma varredura incompleta por cima de uma boa seria pior que não publicar.
+    """
     boards = [None] + UFS  # None = nacional
     editors: dict[str, dict] = {}
+    failed: list[str] = []
     lock = threading.Lock()
     done = [0]
 
@@ -150,7 +155,13 @@ def collect(opener, period: str, quiet: bool = False) -> list[dict]:
         }
         if uf:
             params["stateCode"] = f"BR-{uf}"
-        rows = fetch(opener, params).get("record") or []
+        data = fetch(opener, params)
+        if data is None:
+            with lock:
+                failed.append(f"{period}/{uf or 'BR'}")
+                done[0] += 1
+            return
+        rows = data.get("record") or []
 
         with lock:
             for raw in rows:
@@ -190,7 +201,7 @@ def collect(opener, period: str, quiet: bool = False) -> list[dict]:
     ranked = sorted(editors.values(), key=lambda r: -r["edits"])
     for i, row in enumerate(ranked, 1):
         row["rank"] = i
-    return ranked
+    return ranked, failed
 
 
 # ------------------------------------------------------------------------- saída
@@ -394,6 +405,24 @@ build();
 """
 
 
+def write_atomic(path: Path, text: str) -> None:
+    """Publica a página de uma vez só, para nunca servir HTML pela metade.
+
+    O temporário fica no mesmo diretório de propósito: um arquivo movido de
+    /tmp carrega o rótulo SELinux de lá, e o httpd responderia 403 ao tentar
+    servi-lo. O chmod é explícito porque a umask do cron pode ser restritiva.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.tmp")
+    try:
+        tmp.write_text(text, encoding="utf-8")
+        os.chmod(tmp, 0o644)
+        os.replace(tmp, path)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+
+
 def build_html(collected: dict[str, list[dict]], stamp: str) -> str:
     payload = {
         "periods": {
@@ -432,6 +461,11 @@ def main() -> None:
     )
     ap.add_argument("--out", default=str(ROOT / "placar.html"), help="HTML de saída")
     ap.add_argument("--json", dest="json_out", help="grava também os dados crus")
+    ap.add_argument(
+        "--allow-partial",
+        action="store_true",
+        help="publica mesmo se algum ranking falhar (padrão: aborta sem escrever)",
+    )
     ap.add_argument("--print", action="store_true", help="tabela no terminal")
     ap.add_argument("--top", type=int, default=25, help="linhas com --print")
     ap.add_argument("--quiet", action="store_true", help="sem progresso")
@@ -441,8 +475,17 @@ def main() -> None:
     periods = args.period or list(PERIODS)
 
     collected: dict[str, list[dict]] = {}
+    failures: list[str] = []
     for period in periods:
-        collected[period] = collect(opener, period, quiet=args.quiet)
+        collected[period], failed = collect(opener, period, quiet=args.quiet)
+        failures += failed
+
+    if failures and not args.allow_partial:
+        sys.exit(
+            f"{len(failures)} ranking(s) não responderam: {', '.join(failures)}\n"
+            "Nada foi publicado — a página anterior continua no lugar. "
+            "Use --allow-partial para publicar mesmo assim."
+        )
 
     if args.print:
         for period in periods:
@@ -453,7 +496,7 @@ def main() -> None:
     stamp = now.strftime("%d/%m/%Y %H:%M %Z").strip()
 
     out = Path(args.out)
-    out.write_text(build_html(collected, stamp), encoding="utf-8")
+    write_atomic(out, build_html(collected, stamp))
     size = out.stat().st_size / 1024
 
     if args.json_out:
