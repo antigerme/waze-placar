@@ -271,6 +271,9 @@ PAGE = """<meta charset="utf-8">
   .pos { color:var(--muted); width:56px }
   .medal { font-size:1rem }
   .name { font-weight:600; width:99%; white-space:normal }
+  .name a { color:inherit; text-decoration:none }
+  .name a:hover, .name a:focus-visible { color:var(--accent);
+                                         text-decoration:underline }
   .chip { background:var(--chip); border-radius:5px; padding:1px 7px;
           font-size:.75rem; color:var(--muted); font-weight:600 }
   .barcell { width:120px; min-width:120px; padding-left:0 }
@@ -314,8 +317,9 @@ PAGE = """<meta charset="utf-8">
     dirigir e editar somados — e não por edições. Em janelas curtas as 500 vagas
     enchem de motorista, então <i>Semana</i> e <i>Mês</i> mostram bem menos gente
     que <i>Histórico</i>. Quem editou pouco no período pode não aparecer.</p>
-    <p>Dados de <code>www.waze.com/_user/api/leaderboard</code>. Página estática,
-    sem servidor e sem banco.</p>
+    <p>Clique no nome para abrir o perfil do editor no Waze. Dados de
+    <code>www.waze.com/_user/api/leaderboard</code>. Página estática, sem
+    servidor e sem banco.</p>
   </footer>
 </div>
 
@@ -326,6 +330,11 @@ const MEDALS = ["\\u{1F947}", "\\u{1F948}", "\\u{1F949}"];
 let period = Object.keys(DATA.periods)[0];
 
 const $ = (id) => document.getElementById(id);
+
+// Os nomes vêm de terceiros e entram via innerHTML — escapar não é opcional.
+const ESC = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ESC[c]);
+const profile = (u) => "https://www.waze.com/user/editor/" + encodeURIComponent(u);
 
 function rows() {
   const q = $("q").value.trim().toLowerCase();
@@ -345,7 +354,9 @@ function render() {
       const pct = Math.max(2, Math.round((edits / max) * 100));
       return `<tr>
         <td class="pos">${medal}${pos}</td>
-        <td class="name">${name}</td>
+        <td class="name"><a href="${esc(profile(name))}" target="_blank"
+           rel="noopener noreferrer" title="Ver perfil de ${esc(name)} no Waze"
+           >${esc(name)}</a></td>
         <td><span class="chip">${uf || "--"}</span></td>
         <td>${level ? `<span class="chip">N${level}</span>` : ""}</td>
         <td class="num">${NF.format(edits)}</td>

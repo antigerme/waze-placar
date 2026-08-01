@@ -86,6 +86,10 @@ Como os rankings estaduais **não se sobrepõem** (verificado: 3.000 editores em
 6 estados, zero repetição), a UF de cada editor sai de graça da varredura. A
 lista do próprio Waze não mostra isso.
 
+Clicar no nome abre `www.waze.com/user/editor/<username>` em nova aba — o mesmo
+destino que o placar original usava. Os nomes vêm de terceiros e são escapados
+antes de entrar no HTML.
+
 ## As limitações, que são do Waze e não daqui
 
 **Os rankings ordenam por pontos, não por edições.** `points` é a pontuação
