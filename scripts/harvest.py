@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
 """Harvest Waze editor leaderboards into dated snapshots.
 
-The upstream API only serves cumulative all-time totals, 500 rows per board,
-with no working date filter (see docs/api-recon.md). Two things follow:
+The upstream API serves three windows (ALL_TIME, PAST_WEEK, PAST_MONTH), caps
+every board at 500 rows, and ranks by combined driving+editing points rather
+than by edits (see docs/api-recon.md). Two things follow:
 
   * coverage comes from sweeping many geographic shards and merging them;
-  * "edits in a period" comes from diffing two snapshots taken days apart.
+  * windows other than the three built-in ones -- and editors the 500-row cap
+    hides -- come from snapshotting ALL_TIME and diffing.
 
 Usage:
     export WAZE_COOKIES=/path/to/cookies.txt        # Netscape format
+    python3 scripts/harvest.py board --period PAST_WEEK --country BR
     python3 scripts/harvest.py sweep --country BR
-    python3 scripts/harvest.py sweep --all
+    python3 scripts/harvest.py sweep --all --period PAST_MONTH
     python3 scripts/harvest.py discover --country IT
-    python3 scripts/harvest.py diff data/snapshots/2026-08-01.jsonl \
-                                   data/snapshots/2026-08-08.jsonl
+    python3 scripts/harvest.py diff data/snapshots/ALL_TIME/2026-08-01.jsonl \
+                                   data/snapshots/ALL_TIME/2026-08-08.jsonl
 """
 
 from __future__ import annotations
@@ -42,6 +45,11 @@ UA = (
 ROOT = Path(__file__).resolve().parent.parent
 SHARD_FILE = ROOT / "data" / "subdivisions.json"
 SNAP_DIR = ROOT / "data" / "snapshots"
+
+# The only three the server honours. Anything else -- including plausible
+# guesses like PAST_YEAR or LAST_7_DAYS -- is silently treated as ALL_TIME
+# rather than rejected, so these are enforced client-side.
+PERIODS = ("ALL_TIME", "PAST_WEEK", "PAST_MONTH")
 
 # Deliberate politeness. The API showed no rate limiting, but a global sweep is
 # thousands of requests against infrastructure that is not ours.
@@ -111,13 +119,30 @@ def fetch(opener, params: dict, attempts: int = 4) -> dict:
     return {"record": []}
 
 
-def shard_params(shard: dict) -> dict:
-    p = {"show_editor_levels": "true"}
+def shard_params(shard: dict, period: str) -> dict:
+    # show_editor_levels is sent for parity with the real client; it provably
+    # changes nothing -- `level` is returned for editors either way.
+    p = {"lookbackPeriod": period, "show_editor_levels": "true"}
     if shard.get("country"):
         p["countryCode"] = shard["country"]
     if shard.get("state"):
         p["stateCode"] = shard["state"]
     return p
+
+
+def normalise(row: dict) -> dict | None:
+    """Flatten one API record. `level` is absent for non-editors."""
+    uid = row.get("userId")
+    if not uid:
+        return None
+    return {
+        "userId": uid,
+        "username": row.get("username"),
+        "countryCode": row.get("countryCode"),
+        "level": int(row["level"]) if row.get("level") is not None else None,
+        "mapEditCount": int(row.get("mapEditCount") or 0),
+        "points": int(row.get("points") or 0),
+    }
 
 
 def build_shards(spec: dict, countries: list[str] | None) -> list[dict]:
@@ -134,6 +159,24 @@ def build_shards(spec: dict, countries: list[str] | None) -> list[dict]:
     return shards
 
 
+def cmd_board(args) -> None:
+    """Print a single board straight from the API -- no snapshotting."""
+    opener = load_opener(args.cookies)
+    shard = {"country": args.country, "state": args.state}
+    data = fetch(opener, shard_params(shard, args.period))
+    rows = [r for r in (normalise(x) for x in data.get("record") or []) if r]
+    editors = sorted(
+        (r for r in rows if r["mapEditCount"] > 0), key=lambda r: -r["mapEditCount"]
+    )
+    scope = args.state or args.country or "GLOBAL"
+    print(f"{args.period} / {scope} — {len(editors)} editors in {len(rows)} rows")
+    print(f"{'#':>4}  {'edits':>9}  {'lvl':>3}  {'cc':<3} user")
+    for i, r in enumerate(editors[: args.top], 1):
+        lvl = r["level"] if r["level"] is not None else "-"
+        print(f"{i:>4}  {r['mapEditCount']:>9}  {lvl:>3}  {r['countryCode']:<3} "
+              f"{r['username']}")
+
+
 def cmd_sweep(args) -> None:
     opener = load_opener(args.cookies)
     spec = json.loads(SHARD_FILE.read_text(encoding="utf-8"))
@@ -142,28 +185,31 @@ def cmd_sweep(args) -> None:
         sys.exit("pass --country BR (repeatable) or --all")
 
     shards = build_shards(spec, countries)
-    print(f"sweeping {len(shards)} boards with {WORKERS} workers", file=sys.stderr)
+    print(
+        f"sweeping {len(shards)} boards ({args.period}) with {WORKERS} workers",
+        file=sys.stderr,
+    )
 
-    # userId -> best row seen. Boards disagree only by staleness, so keep the
-    # row with the highest edit count.
+    # userId -> best row seen. A user can surface on several boards; keep the
+    # highest edit count, since boards differ only by staleness.
     merged: dict[str, dict] = {}
     lock = threading.Lock()
     done = [0]
 
     def work(shard: dict) -> None:
-        data = fetch(opener, shard_params(shard))
+        data = fetch(opener, shard_params(shard, args.period))
         rows = data.get("record") or []
         with lock:
             fresh = 0
-            for row in rows:
-                uid = row.get("userId")
-                if not uid:
+            for raw in rows:
+                row = normalise(raw)
+                if row is None:
                     continue
-                prev = merged.get(uid)
+                prev = merged.get(row["userId"])
                 if prev is None:
                     fresh += 1
-                if prev is None or int(row["mapEditCount"]) > int(prev["mapEditCount"]):
-                    merged[uid] = row
+                if prev is None or row["mapEditCount"] > prev["mapEditCount"]:
+                    merged[row["userId"]] = row
             done[0] += 1
             print(
                 f"  [{done[0]:4d}/{len(shards)}] {shard['label']:<8} "
@@ -175,12 +221,15 @@ def cmd_sweep(args) -> None:
         list(pool.map(work, shards))
 
     stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d")
-    SNAP_DIR.mkdir(parents=True, exist_ok=True)
-    out = Path(args.out) if args.out else SNAP_DIR / f"{stamp}.jsonl"
+    out_dir = SNAP_DIR / args.period
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out = Path(args.out) if args.out else out_dir / f"{stamp}.jsonl"
     captured = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
 
-    editors = [r for r in merged.values() if int(r["mapEditCount"]) > 0]
-    editors.sort(key=lambda r: -int(r["mapEditCount"]))
+    # In a period sweep, mapEditCount is edits *within* that window, so this
+    # filter means "active editors"; in ALL_TIME it means "has ever edited".
+    editors = [r for r in merged.values() if r["mapEditCount"] > 0]
+    editors.sort(key=lambda r: -r["mapEditCount"])
 
     with out.open("w", encoding="utf-8") as fh:
         fh.write(
@@ -188,6 +237,8 @@ def cmd_sweep(args) -> None:
                 {
                     "_meta": {
                         "captured_at": captured,
+                        "period": args.period,
+                        "scope": countries or "ALL",
                         "boards": len(shards),
                         "users_seen": len(merged),
                         "editors": len(editors),
@@ -197,21 +248,7 @@ def cmd_sweep(args) -> None:
             + "\n"
         )
         for rank, row in enumerate(editors, 1):
-            fh.write(
-                json.dumps(
-                    {
-                        "rank": rank,
-                        "userId": row["userId"],
-                        "username": row["username"],
-                        "countryCode": row["countryCode"],
-                        "level": int(row["level"]),
-                        "mapEditCount": int(row["mapEditCount"]),
-                        "points": int(row["points"]),
-                    },
-                    ensure_ascii=False,
-                )
-                + "\n"
-            )
+            fh.write(json.dumps({"rank": rank, **row}, ensure_ascii=False) + "\n")
 
     print(
         f"\n{out}\n  {len(merged)} users seen, {len(editors)} with >0 edits",
@@ -240,6 +277,7 @@ def cmd_discover(args) -> None:
     def probe(sfx: str) -> None:
         code = f"{cc}-{sfx}"
         data = fetch(opener, {"countryCode": cc, "stateCode": code,
+                              "lookbackPeriod": "ALL_TIME",
                               "show_editor_levels": "true"})
         if data.get("record"):
             with lock:
@@ -273,9 +311,17 @@ def read_snapshot(path: str) -> tuple[dict, dict[str, dict]]:
 
 
 def cmd_diff(args) -> None:
-    """The time-windowed board the API refuses to give us."""
+    """Build a window the API doesn't offer, by differencing two ALL_TIME sweeps."""
     old_meta, old = read_snapshot(args.old)
     new_meta, new = read_snapshot(args.new)
+
+    for name, meta in (("old", old_meta), ("new", new_meta)):
+        period = meta.get("period", "ALL_TIME")
+        if period != "ALL_TIME":
+            sys.exit(
+                f"{name} snapshot has period={period}; only ALL_TIME snapshots "
+                "carry cumulative totals that can be differenced."
+            )
 
     deltas = []
     for uid, row in new.items():
@@ -323,10 +369,20 @@ def main() -> None:
     )
     sub = ap.add_subparsers(dest="cmd", required=True)
 
+    bd = sub.add_parser("board", help="print one board live")
+    bd.add_argument("--period", choices=PERIODS, default="PAST_WEEK")
+    bd.add_argument("--country", help="ISO alpha-2; omit for the global board")
+    bd.add_argument("--state", help="ISO 3166-2, e.g. BR-SP; needs --country")
+    bd.add_argument("--top", type=int, default=25)
+    bd.set_defaults(func=cmd_board)
+
     sw = sub.add_parser("sweep", help="harvest boards into a dated snapshot")
+    sw.add_argument("--period", choices=PERIODS, default="ALL_TIME")
     sw.add_argument("--country", action="append", help="ISO alpha-2, repeatable")
     sw.add_argument("--all", action="store_true", help="every known country")
-    sw.add_argument("--out", help="output path (default data/snapshots/<date>.jsonl)")
+    sw.add_argument(
+        "--out", help="output path (default data/snapshots/<period>/<date>.jsonl)"
+    )
     sw.set_defaults(func=cmd_sweep)
 
     dc = sub.add_parser("discover", help="find valid subdivision codes")
@@ -341,8 +397,10 @@ def main() -> None:
     df.set_defaults(func=cmd_diff)
 
     args = ap.parse_args()
-    if args.cmd in ("sweep", "discover") and not args.cookies:
+    if args.cmd in ("board", "sweep", "discover") and not args.cookies:
         sys.exit("set --cookies or WAZE_COOKIES")
+    if args.cmd == "board" and args.state and not args.country:
+        sys.exit("--state needs --country")
     args.func(args)
 
 
