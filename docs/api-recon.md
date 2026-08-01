@@ -108,6 +108,13 @@ A full Brazil sweep — national plus all 27 subdivisions, 28 requests — yield
 Subdivision codes must be full ISO 3166-2 — `BR-SP` works, bare `SP` returns 0
 rows, as do `California` and numeric codes.
 
+Subdivision boards are also **mutually exclusive**: across the six Brazilian
+state boards above, 3,000 users appeared and not one showed up on two boards.
+So a sweep attributes a home state to every editor for free — something the
+Waze UI never displays in the list. National-board members are always covered,
+since ranking in a country's top 500 by points implies ranking in your own
+state's top 500.
+
 ### 5. Editor density collapses on short windows — the reason to still snapshot
 
 Because boards sort by points, a short window fills up with drivers. Measured
@@ -129,9 +136,11 @@ So Waze's own monthly board surfaces roughly 3.5% of Brazil's tracked editor
 base. Diffing two `ALL_TIME` snapshots a month apart instead reveals every one
 of the 2,179 who edited in between.
 
-**Design consequence:** `PAST_WEEK`/`PAST_MONTH` are a zero-latency convenience
-worth exposing, but the authoritative period ranking comes from snapshot
-diffing. Diffing also unlocks windows the API has no enum for.
+**Design consequence:** snapshot diffing would recover all 2,179 and unlock
+windows the API has no enum for, but it needs somewhere to keep the snapshots.
+With no datastore in scope, the project ships the three native windows as-is
+and states the shortfall on the page itself. The diffing collector lives in
+this repo's git history if storage ever appears.
 
 ### 6. No rate limiting observed
 

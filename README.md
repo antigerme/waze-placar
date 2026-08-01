@@ -1,106 +1,84 @@
 # waze-placar
 
-Reviving the Waze map editors' leaderboard.
+Ressuscitando o placar dos editores de mapa do Waze — Brasil.
 
-Waze retired the public editors' board, but `https://www.waze.com/leaderboard`
-was only de-linked — the page and its backing API are still live. This project
-harvests that API and rebuilds the scoreboard the community lost.
+O Waze aposentou o placar público dos editores, mas
+`https://www.waze.com/leaderboard` só foi desvinculado da navegação: a página
+ainda renderiza e a API por trás dela ainda serve dados. Este projeto lê essa
+API ao vivo e remonta o placar que a comunidade perdeu.
 
-## State of play
+Sem banco, sem servidor, sem estado. Um comando lê tudo do Waze e escreve um
+HTML autocontido que abre em qualquer lugar.
 
-Recon on the live API is done, verified against a HAR capture of the real
-client, and documented in [`docs/api-recon.md`](docs/api-recon.md). A working
-harvester is in [`scripts/harvest.py`](scripts/harvest.py).
+## Uso
 
-The HAR turned up no Champs-only data source — it drives the same public
-`/_user/api/leaderboard` that the ordinary SPA does. So that endpoint is the
-whole game for now.
-
-## What the upstream API gives us, and what it hides
-
-**Three time windows, plus a trap.** `ALL_TIME`, `PAST_WEEK` and `PAST_MONTH`
-work. Every other value — `PAST_YEAR`, `LAST_7_DAYS`, or plain garbage — returns
-the `ALL_TIME` payload with a `200` and no error. Probing the parameter with
-invented values makes it look inert when it isn't; the harvester pins the enum
-client-side so that cannot happen twice.
-
-**Every board caps at 500 rows.** No pagination parameter works. The way around
-it is geographic sharding: each country and each ISO 3166-2 subdivision is its
-own 500-row board, and they overlap far less than you would expect. A Brazil
-sweep — national plus 27 states, 28 requests — yields **13,498 distinct users,
-2,179 with at least one map edit**, against a 500-row ceiling.
-
-**Boards rank by points, not by edits.** `points` is Waze's combined
-driving-and-editing score, so commuters compete with editors for the 500 slots.
-241 of the global top 500 have fewer than 100 map edits. A real editors' board
-re-sorts by `mapEditCount` and drops zero-edit rows.
-
-**Short windows are mostly drivers.** That last problem gets much worse the
-shorter the window: editors are 45% of the BR all-time board but only 8% of the
-BR monthly one. Sweeping all 28 Brazil boards for `PAST_MONTH` surfaces just
-**77** active editors, against 2,179 tracked all-time — roughly 3.5% of the
-editor base.
-
-So the built-in windows are a zero-latency convenience, not the product. The
-authoritative period ranking comes from snapshotting `ALL_TIME` on a schedule
-and diffing, which catches every editor who moved and works for windows the API
-has no enum for.
-
-## Usage
-
-Requires Python 3.11+ and no third-party packages. Authentication is a logged-in
-`waze.com` session cookie, exported in Netscape format.
+Precisa de Python 3.11+, nada além da biblioteca padrão. A autenticação é o
+cookie de sessão de uma conta logada no `waze.com`, em formato Netscape —
+por padrão em `/tmp/cookies`.
 
 ```bash
-export WAZE_COOKIES=/path/to/cookies.txt
-
-# read one board live, no snapshot
-python3 scripts/harvest.py board --period PAST_WEEK --country BR
-python3 scripts/harvest.py board --period PAST_MONTH            # global
-
-# harvest one country (national board + every known subdivision)
-python3 scripts/harvest.py sweep --country BR
-
-# harvest everything in data/subdivisions.json, plus the global board
-python3 scripts/harvest.py sweep --all
-
-# find which subdivision codes a country actually serves, and record them
-python3 scripts/harvest.py discover --country IT
-
-# derive a window from two all-time sweeps
-python3 scripts/harvest.py diff data/snapshots/ALL_TIME/2026-08-01.jsonl \
-                                data/snapshots/ALL_TIME/2026-08-08.jsonl --top 50
+python3 scripts/placar.py                      # gera placar.html
+python3 scripts/placar.py --print              # tabela no terminal
+python3 scripts/placar.py --period PAST_WEEK   # só uma janela
+python3 scripts/placar.py --json dados.json    # dados crus junto
+python3 scripts/placar.py --cookies ~/cookies.txt --out /var/www/placar.html
 ```
 
-Snapshots land in `data/snapshots/<period>/<date>.jsonl` — one JSON object per
-line, sorted by edit count, preceded by a `_meta` line. Two Brazil baselines
-are committed so the first diff has something to compare against.
+Uma execução completa são 84 requisições e leva ~40 s.
 
-`diff` refuses anything but `ALL_TIME` snapshots: only cumulative totals can be
-meaningfully subtracted.
+## O que o placar mostra
 
-`data/subdivisions.json` currently covers BR, US, CA and MX. Extend it by hand
-or with `discover`.
+Três abas, que são exatamente as três janelas que a API oferece:
 
-## Notes
+| Aba | Janela da API | Editores no Brasil |
+|-----|---------------|--------------------|
+| Histórico | `ALL_TIME` | ~2.180 |
+| Mês | `PAST_MONTH` | ~77 |
+| Semana | `PAST_WEEK` | ~79 |
 
-- Cookies are session credentials. `.gitignore` blocks `cookies*.txt`, `*.har`
-  and `.env`; keep it that way.
-- The harvester throttles to ~3 requests/second across 4 workers and backs off
-  on failure. No rate limiting was observed upstream, but a global sweep is
-  thousands of requests against infrastructure that isn't ours.
-- `/_user/api/user` and `/il-UsersProfile/app/userInfo` return real PII for the
-  *authenticated caller only* — full name, email, city, last known coordinates.
-  Both ignore a `userId` parameter, so neither is a lookup for other users, and
-  nothing from them belongs in a harvested dataset.
-- `level` is absent from a record when the user has never edited. Don't assume
-  the key exists.
+Cada janela é varrida em 28 rankings — o nacional e os 27 estaduais — porque a
+API devolve no máximo 500 linhas por ranking e não tem paginação. A varredura
+estadual é o que leva o histórico de 500 para ~2.180 editores.
 
-## Next
+Como os rankings estaduais **não se sobrepõem** (verificado: 3.000 editores em
+6 estados, zero repetição), a UF de cada editor sai de graça da varredura. A
+lista do próprio Waze não mostra isso.
 
-- Start the scheduled `ALL_TIME` sweep — the diff-based rankings are worth
-  nothing until two snapshots exist, so the clock should start early.
-- Fill out `data/subdivisions.json` beyond BR/US/CA/MX with `discover`.
-- Decide the storage model, then the public site.
-- Still open: whether any Champs-only feed exists with per-user edit history or
-  reach beyond the top 500. Nothing in the capture pointed at one.
+## As limitações, que são do Waze e não daqui
+
+**Os rankings ordenam por pontos, não por edições.** `points` é a pontuação
+combinada de dirigir e editar, e é a chave de ordenação de todo ranking. As 500
+vagas são disputadas por motorista também. O placar reordena por edições e
+descarta quem tem zero, mas não consegue recuperar quem ficou fora das 500
+linhas de origem.
+
+**Janela curta é quase só motorista.** O efeito acima piora quanto menor a
+janela: editores são 45% do ranking histórico do Brasil, mas 8% do mensal. Daí
+a diferença brutal entre ~2.180 e ~77. Não é bug da coleta — é o que o Waze
+entrega.
+
+**Só existem três janelas.** `ALL_TIME`, `PAST_WEEK` e `PAST_MONTH`. Qualquer
+outro valor de `lookbackPeriod` — `PAST_YEAR`, `LAST_7_DAYS`, ou lixo puro —
+volta com status 200 e o payload de `ALL_TIME`, sem erro nenhum. O script fixa
+o enum do lado do cliente para essa armadilha não passar batida.
+
+Dava para contornar tudo isso guardando snapshots diários e comparando: um diff
+de dois `ALL_TIME` com um mês de distância pegaria os ~2.180 que editaram, não
+77, e permitiria qualquer janela. Fica registrado como caminho caso um dia haja
+onde armazenar — o histórico do git tem o coletor com snapshot e diff, e o
+suporte a outros países, removidos daqui por estarem fora do escopo atual.
+
+## Notas
+
+- Cookies são credencial de sessão. O `.gitignore` bloqueia `cookies*.txt`,
+  `*.har` e `.env`; melhor manter assim.
+- O script limita a ~3 req/s em 4 workers e faz backoff em falha. Não observei
+  rate limiting do lado do Waze, mas a infraestrutura não é nossa.
+- `/_user/api/user` e `/il-UsersProfile/app/userInfo` devolvem PII real **do
+  próprio chamador** — nome completo, e-mail, cidade, última coordenada. Ambos
+  ignoram o parâmetro `userId`, então não servem para consultar terceiros, e
+  nada dali entra no placar.
+- `level` some do registro de quem nunca editou. Não assuma que a chave existe.
+
+O contrato completo da API, com as medições, está em
+[`docs/api-recon.md`](docs/api-recon.md).

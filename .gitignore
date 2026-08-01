@@ -6,3 +6,7 @@ cookies*.txt
 __pycache__/
 *.pyc
 node_modules/
+
+# saída gerada localmente
+placar.html
+placar.json
