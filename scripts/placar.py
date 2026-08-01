@@ -40,7 +40,7 @@ UA = (
     "(KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
 )
 ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_COOKIES = "/tmp/cookies"
+DEFAULT_COOKIES = "/tmp/cookies.txt"
 
 # As únicas três que o servidor honra. Qualquer outro valor volta como
 # ALL_TIME com status 200, sem erro — por isso o enum é fixo aqui.

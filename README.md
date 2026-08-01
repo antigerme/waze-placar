@@ -14,7 +14,7 @@ HTML autocontido que abre em qualquer lugar.
 
 Precisa de Python 3.11+, nada além da biblioteca padrão. A autenticação é o
 cookie de sessão de uma conta logada no `waze.com`, em formato Netscape —
-por padrão em `/tmp/cookies`.
+por padrão em `/tmp/cookies.txt`.
 
 ```bash
 python3 scripts/placar.py                      # gera placar.html
