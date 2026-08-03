@@ -214,9 +214,10 @@ def main() -> None:
         file=sys.stderr)
     print("  {} editores no histórico, {} ativos em 90 d, {} em 30 d".format(
         r["historico"], r["ativos90"], r["ativos30"]), file=sys.stderr)
-    print("  {:,} edições em {} dias, {}% concentradas em {} pessoas".format(
-        r["edicoes90"], pagina.JANELA, r["concKpi"], pagina.CONC_KPI)
-        .replace(",", "."), file=sys.stderr)
+    print("  {} edições em {} dias, {}% concentradas em {} pessoas".format(
+        "{:,}".format(r["edicoes90"]).replace(",", "."), pagina.JANELA,
+        "{:.1f}".format(r["concKpi"]).replace(".", ","), pagina.CONC_KPI),
+        file=sys.stderr)
 
 
 if __name__ == "__main__":

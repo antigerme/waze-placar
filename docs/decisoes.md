@@ -38,8 +38,8 @@ intencionais. Daí o `scripts/auditar-layout.mjs`.
 
 **Deixar afirmação escrita à mão na página.** Textos como "não há pico de fim
 de semana" e "as safras recentes aparecem mais altas" ficaram falsos quando os
-dados mudaram, sem ninguém perceber. Hoje não há número literal na prosa da
-página: ou é descrição do método, ou é medido na coleta.
+dados mudaram, sem ninguém perceber. Hoje nenhum texto da página tem número
+literal: ou é descrição do método, ou é medido na coleta.
 
 **Descartar dado na normalização.** O `normaliza_perfil` guardava
 `menteesCount` e jogava fora a lista `mentees[]` que vinha na mesma resposta.
@@ -93,9 +93,11 @@ só as três da API. Removido quando o escopo passou a ser "sem armazenamento".
 Continua sendo a melhor saída se um dia houver onde guardar — o código está no
 histórico do git, antes do commit que reduziu o escopo para o Brasil.
 
-**Painel de "quem voltou a editar".** Implementado e medido: zero retornos no
-período. O número aparece como frase dentro da vigília, mas painel próprio para
-mostrar zero não se justifica.
+**Painel de "quem voltou a editar".** Implementado e medido. Na coleta em que
+foi avaliado deu zero retornos, e a decisão foi não dar painel próprio a um
+número desses — hoje ele aparece como frase dentro da vigília. Fica o registro
+de que a justificativa envelheceu: em 03/08/2026 foram 7. Se passar a ser
+rotina, vale reabrir.
 
 **Distância até os colegas de estado sem recortar o Brasil.** A primeira versão
 misturava "cuida de outro estado" com "cuida de outro país", e o primeiro
@@ -128,8 +130,8 @@ Brasil.
 | Ativos por nível, N1→N6 | 6%, 21%, 53%, 93%, 91%, 100% |
 | Mentores / afilhados nomeados | 23 / 105 |
 | Ativos: apadrinhados / demais | 36% / 11% |
-| Estreantes na janela | 83, dos quais 19 ainda ativos |
-| Cobertura de área | 109 editores, 481 áreas, 4.063 células |
+| Estreantes na janela | 84, dos quais 20 ainda ativos |
+| Cobertura de área | 127 editores, 515 áreas, 4.063 células |
 | Edições recentes mapeadas | 1.642 de 251 editores |
 | Retenção mediana das safras maduras | 18%, entre 14% e 26% |
 | Ativos fora da varredura `ALL_TIME` | 42% |
