@@ -814,8 +814,9 @@ function calendario(p) {
     A mediana diária é <b>${NF.format(p.calMediana)}</b>.
     ${destaque.length
       ? `Contornados, os <b>${destaque.length}</b> dias que fogem dois desvios da
-         mediana — ${destaque.map((d) => d[0].slice(8, 10) + "/" + d[0].slice(5, 7)).join(", ")}.
-         Dias assim costumam ser mutirão de um lado e feriado ou pane do outro.`
+         mediana — ${destaque.map((d) => (d[2] > 0 ? "↑" : "↓") + " " +
+           d[0].slice(8, 10) + "/" + d[0].slice(5, 7)).join(", ")}.
+         O que causou cada um não sai daqui.`
       : "Nenhum dia foge dois desvios da mediana no período."}
     </p></div>`;
 }
@@ -873,8 +874,9 @@ function cidadesEtipos(a) {
     ${barras(a.tipos.slice(0, 8).map(([k, v]) => [ROT[k] || k, v]),
              (v) => Math.round(100 * v / totTipos) + "%")}
     <p style="color:var(--muted);font-size:.8rem;margin:10px 0 0">
-    Operações das edições recentes, por tipo de objeto. Difere da composição
-    histórica: aqui pesa o que está sendo tocado nos últimos dias.</p></div>`;
+    Operações das edições recentes, por tipo de objeto tocado. É o trabalho dos
+    últimos dias, não o acumulado de carreira que aparece nos selos da
+    tabela.</p></div>`;
 }
 
 function mapa(m) {
@@ -994,7 +996,7 @@ function paineis() {
     Do top ${D.cfg.topParados} histórico, os que fizeram menos de
     ${D.cfg.paradoMax} edições nos últimos ${D.cfg.janela} dias.</p></div>`);
 
-  blocos.push(`<div class="painel"><h2>Ritmo semanal — 90 dias</h2>
+  blocos.push(`<div class="painel"><h2>Ritmo semanal — ${D.cfg.janela} dias</h2>
     ${barras(p.semana, (v) => NF.format(v))}
     <p style="color:var(--muted);font-size:.8rem;margin:10px 0 0">
     ${(() => { const d = D.resumo.deltaFds;
@@ -1041,8 +1043,9 @@ function paineis() {
        <span class="v">${mt.pctResto}%</span></div>
      <p style="color:var(--muted);font-size:.8rem;margin:8px 0 12px">
      Fatia que editou nos últimos ${D.cfg.janela} dias, entre os
-     ${NF.format(mt.rastreados)} apadrinhados que estão no placar e entre os
-     demais editores.</p>
+     ${NF.format(mt.rastreados)} apadrinhados e entre os demais editores. Os
+     dois lado a lado não mostram que apadrinhar faz ficar: quem procura mentor
+     provavelmente já é quem tenderia a continuar.</p>
      <table><thead><tr><th>Mentor</th><th class="num">Afilh.</th>
      <th class="num">Ativos</th></tr></thead><tbody>
      ${mt.top.map(([u, uf, n, lst, viv]) => `<tr>
