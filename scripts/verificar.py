@@ -243,6 +243,42 @@ else:
             erro("docs", "docs/decisoes.md perdeu a seção '{}'".format(secao))
 
 
+# -------------------------------------------- 7. a página ainda monta inteira
+# Compilar não basta: renomear um campo do payload quebra quem lê o nome antigo
+# e só aparece no fim de uma coleta de quarenta minutos. Aconteceu com `top50`,
+# que o placar.py lia depois de já ter publicado a página — KeyError com o
+# arquivo no ar e saída diferente de zero no cron. Aqui a página é montada de
+# ponta a ponta com dado sintético, sem tocar na rede.
+sys.path.insert(0, str(SCRIPTS))
+try:
+    import pagina as _pag
+
+    _perfis = [{
+        "username": "fulano", "level": 3, "edits": 1234, "userId": "1",
+        "activity": [i % 5 for i in range(_pag.VETOR)],
+        "firstEditDate": 1400000000000, "menteesCount": 0,
+        "editsByType": {"segmentos": 10},
+    }]
+    _dados = _pag.prepara(_perfis, {"fulano": "BR-SP"}, "01/01/2000 00:00 UTC",
+                          estat={"foraPct": 1, "semEdicaoPct": 2})
+    _html = _pag.build_html(_dados)
+    if "__DATA__" in _html:
+        erro("monta", "o marcador __DATA__ ficou na página")
+    # os campos que o placar.py imprime no fim da execução
+    _resumo = _dados["resumo"]
+    _placar = (SCRIPTS / "placar.py").read_text(encoding="utf-8")
+    for _campo in sorted(set(re.findall(r'\br\["(\w+)"\]', _placar))):
+        if _campo not in _resumo:
+            erro("monta", 'placar.py lê resumo["{}"], que prepara() não devolve'
+                 .format(_campo))
+    for _const in sorted(set(re.findall(r"\bpagina\.([A-Z_]+)\b", _placar))):
+        if not hasattr(_pag, _const):
+            erro("monta", "placar.py usa pagina.{}, que não existe".format(_const))
+except Exception as _e:                                      # noqa: BLE001
+    erro("monta", "a página não monta com dado sintético: {}: {}".format(
+        type(_e).__name__, _e))
+
+
 # ------------------------------------------------------------------ relatório
 if falhas:
     print("verificação falhou:\n")

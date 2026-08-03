@@ -56,9 +56,12 @@ deliberado. O teto do Waze nunca foi testado, de propósito.
 `scripts/verificar.py` roda sozinho ao fim de cada resposta, por um hook em
 `.claude/settings.json`. Ele falha e devolve o motivo quando a documentação
 descola do código: flag citada no README que não existe mais, endpoint novo sem
-entrada em `docs/api-recon.md`, número literal em qualquer texto da página
-(prosa, dica de hover, `title=` ou rótulo de aba), painel que o README não
-lista, ou seção perdida do `docs/decisoes.md`.
+entrada em `docs/api-recon.md`, número literal em qualquer texto da página,
+painel que o README não lista, ou seção perdida do `docs/decisoes.md`.
+
+Ele também monta a página inteira com dado sintético e confere que o
+`placar.py` ainda acha os campos que lê. Renomear campo do payload quebrava só
+no fim de uma coleta de dezenas de minutos, com a página já publicada.
 
 Se ele reclamar, **atualize o documento** — não relaxe a checagem. Cada uma
 delas existe porque a coisa correspondente já desatualizou sem ninguém notar.
