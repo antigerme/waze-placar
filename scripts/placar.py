@@ -146,6 +146,34 @@ def main() -> None:
                            "edits": e["edits"], "activity": [],
                            "firstEditDate": None, "menteesCount": 0})
 
+    # Afilhados citados que não estão no universo do placar. Sem eles a
+    # comparação de mentoria mede só quem já apareceu num ranking, que é
+    # justamente quem produziu — viés que inverteria a conclusão.
+    extras = {}
+    if not args.sem_perfis:
+        # Primeiro a lista completa de afilhados, que o perfil corta em 10.
+        mentores = [(p["username"], p.get("userId")) for p in perfis
+                    if p.get("menteesCount") and p.get("userId")]
+        if mentores:
+            if not args.quiet:
+                print("buscando afilhados de {} mentores…".format(len(mentores)),
+                      file=sys.stderr)
+            completos = waze.coleta_mentees(opener, mentores, quiet=args.quiet)
+            for p in perfis:
+                if p["username"] in completos:
+                    p["mentees"] = completos[p["username"]]
+
+        vistos_n = {p["username"] for p in perfis}
+        faltam = sorted({m["username"] for p in perfis
+                         for m in (p.get("mentees") or [])
+                         if m.get("username") and m["username"] not in vistos_n})
+        if faltam:
+            if not args.quiet:
+                print("buscando {} afilhados fora do universo…".format(len(faltam)),
+                      file=sys.stderr)
+            achados, _ = waze.coleta_perfis(opener, faltam, quiet=args.quiet)
+            extras = {a["username"]: a for a in achados}
+
     # Áreas só dos ativos: o mapa é sobre quem cuida da região hoje, e são
     # ~165 requisições em vez de 2.200.
     areas = {}
@@ -160,7 +188,7 @@ def main() -> None:
 
     agora = dt.datetime.now().astimezone()
     dados = pagina.prepara(perfis, ufs, agora.strftime("%d/%m/%Y %H:%M %Z").strip(),
-                           areas=areas, estat=estat)
+                           areas=areas, estat=estat, extras=extras)
 
     out = Path(args.out)
     write_atomic(out, pagina.build_html(dados))

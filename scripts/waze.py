@@ -28,6 +28,13 @@ PROFILE = "https://www.waze.com/Descartes/app/UserProfile/Profile"
 # brasileiro só row-Descartes ("rest of world") devolve os polígonos —
 # Descartes e il-Descartes respondem 200 com managedAreas vazio.
 AREAS = "https://www.waze.com/row-Descartes/app/UserProfile/Areas"
+# O perfil trunca a lista de afilhados em 10; este endpoint devolve todos.
+MENTEES = "https://www.waze.com/row-Descartes/app/Mentoring/Mentees"
+# Lista nacional de quem começou a editar há pouco — idêntica seja qual for o
+# mentor que consulta. É a única fonte de novatos: quem tem 3 edições não entra
+# em ranking nenhum, então sem isto o funil de entrada some do placar.
+NEW_EDITORS = "https://www.waze.com/row-Descartes/app/Mentoring/NewEditors"
+EU = "https://www.waze.com/_user/api/user"
 
 UA = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36")
@@ -288,6 +295,18 @@ def universo(opener, quiet=False) -> Tuple[List[dict], List[str]]:
     # Duas medidas que a página usa para não precisar afirmar nada de cor:
     # quanto o ranking histórico sozinho deixaria de fora, e que fatia das
     # linhas dos rankings de janela é de gente que não editou no período.
+    novatos = coleta_novatos(opener, meu_id(opener), quiet=quiet)
+    novos_nomes = set()
+    for n in novatos:
+        if n["username"] in juntos:
+            continue
+        novos_nomes.add(n["username"])
+        juntos[n["username"]] = {
+            "userId": str(n["userId"]) if n["userId"] else None,
+            "username": n["username"], "level": n["level"],
+            "edits": n["edits"], "points": 0, "uf": None,
+        }
+
     historico = porperiodo.get("ALL_TIME", set())
     ativos = set()
     for pp in PERIODS:
@@ -301,6 +320,8 @@ def universo(opener, quiet=False) -> Tuple[List[dict], List[str]]:
         "linhasJanela": janelas["linhas"],
         "semEdicaoPct": (round(100 * janelas["semEdicao"] / janelas["linhas"])
                          if janelas["linhas"] else 0),
+        "novatosLista": len(novatos),
+        "novatosForaDoRanking": len(novos_nomes),
     }
     ordenado = sorted(juntos.values(), key=lambda r: -r["edits"])
     return ordenado, falhas, estat
@@ -377,6 +398,69 @@ def coleta_areas(opener, alvos, quiet=False) -> Dict[str, list]:
     if not quiet:
         print("  áreas: {} de {} editores gerenciam alguma".format(
             len(out), len(alvos)), file=sys.stderr)
+    return out
+
+
+def meu_id(opener) -> Optional[int]:
+    """userID da sessão, exigido por NewEditors."""
+    d = fetch(opener, EU, {}, "https://www.waze.com/leaderboard")
+    return (d or {}).get("id")
+
+
+def coleta_novatos(opener, uid, quiet=False) -> List[dict]:
+    """Editores recém-chegados, que não aparecem em ranking por falta de pontos."""
+    if not uid:
+        return []
+    try:
+        d = fetch(opener, NEW_EDITORS, {"userID": uid},
+                  "https://www.waze.com/user/editor/")
+    except SemPermissao:
+        return []
+    lista = d if isinstance(d, list) else []
+    out = [{"username": x.get("userName"), "userId": x.get("userId"),
+            "level": (x["rank"] + 1) if isinstance(x.get("rank"), int) else None,
+            "edits": x.get("edits") or 0}
+           for x in lista if x.get("userName")]
+    if not quiet:
+        print("  novatos: {} nomes".format(len(out)), file=sys.stderr)
+    return out
+
+
+def coleta_mentees(opener, alvos, quiet=False) -> Dict[str, list]:
+    """Lista completa de afilhados por mentor. `alvos` é [(username, userId)].
+
+    O campo mentees[] do perfil para em 10, então mentor com mais que isso
+    apareceria com a lista cortada — e a fatia de afilhados ativos sairia de
+    uma amostra enviesada pelos primeiros da lista.
+    """
+    out = {}                          # type: Dict[str, list]
+    lock = threading.Lock()
+
+    def work(par):
+        username, uid = par
+        if not uid:
+            return
+        ref = "https://www.waze.com/user/editor/" + urllib.parse.quote(username)
+        try:
+            d = fetch(opener, MENTEES, {"userID": uid}, ref)
+        except SemPermissao:
+            return
+        lista = d if isinstance(d, list) else (d or {}).get("mentees") or []
+        limpos = [
+            {"userId": m.get("userId"), "username": m.get("userName"),
+             "level": (m["rank"] + 1) if isinstance(m.get("rank"), int) else None,
+             "edits": m.get("edits") or 0, "desde": m.get("menteeStartDate")}
+            for m in lista if m.get("userName")
+        ]
+        if limpos:
+            with lock:
+                out[username] = limpos
+
+    with ThreadPoolExecutor(max_workers=WORKERS) as pool:
+        list(pool.map(work, alvos))
+    if not quiet:
+        print("  afilhados: {} mentores, {} nomes".format(
+            len(out), sum(len(v) for v in out.values())), file=sys.stderr)
     return out
 
 

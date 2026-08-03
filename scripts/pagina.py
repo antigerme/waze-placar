@@ -154,10 +154,12 @@ def _grade_cobertura(areas, ufs):
     }
 
 
-def prepara(perfis, ufs, gerado, areas=None, estat=None):
+def prepara(perfis, ufs, gerado, areas=None, estat=None, extras=None):
     """Transforma os perfis crus na carga que a página consome."""
     areas = areas or {}
     estat = estat or {}
+    # Perfis buscados só para a mentoria; não entram no placar nem nas abas.
+    extras = extras or {}
     eds = []
     for p in perfis:
         act = (p.get("activity") or [])
@@ -321,27 +323,45 @@ def prepara(perfis, ufs, gerado, areas=None, estat=None):
             if m.get("username"):
                 apad[m["username"]] = p["username"]
     por_nome = {e["u"]: e for e in eds}
-    dentro = [u for u in apad if u in por_nome]
-    ativos_ap = sum(1 for u in dentro if por_nome[u]["d90"] > 0)
+
+    def _d90(u):
+        """Atividade do afilhado, venha do universo ou da busca extra."""
+        if u in por_nome:
+            return por_nome[u]["d90"]
+        x = extras.get(u)
+        if x is None:
+            return None                      # não conseguimos olhar
+        return sum((x.get("activity") or [0])[:-1])
+
+    medidos = [u for u in apad if _d90(u) is not None]
+    ativos_ap = sum(1 for u in medidos if _d90(u) > 0)
     resto = [e for e in eds if e["u"] not in apad]
     ativos_re = sum(1 for e in resto if e["d90"] > 0)
     mentores = []
+    truncados = 0
     for p in perfis:
         lista = [m for m in (p.get("mentees") or []) if m.get("username")]
         if not lista:
             continue
-        viv = sum(1 for m in lista
-                  if m["username"] in por_nome and por_nome[m["username"]]["d90"] > 0)
-        mentores.append([p["username"], ufs.get(p["username"]), len(lista), viv])
-    mentores.sort(key=lambda r: (-r[3], -r[2]))
+        total = p.get("menteesCount") or len(lista)
+        if total > len(lista):
+            truncados += 1
+        viv = sum(1 for m in lista if (_d90(m["username"]) or 0) > 0)
+        mentores.append([p["username"], ufs.get(p["username"]), total,
+                         len(lista), viv])
+    mentores.sort(key=lambda r: (-r[4], -r[2]))
     mentoria = {
         "mentores": len(mentores),
         "afilhados": len(apad),
-        "rastreados": len(dentro),
+        "rastreados": len(medidos),
         "ativosApad": ativos_ap,
-        "pctApad": round(100 * ativos_ap / len(dentro)) if dentro else 0,
+        "pctApad": round(100 * ativos_ap / len(medidos)) if medidos else 0,
         "pctResto": round(100 * ativos_re / len(resto)) if resto else 0,
         "top": mentores[:8],
+        # A API devolve no máximo 10 afilhados por mentor; para quem tem mais,
+        # a fatia de ativos sai de uma amostra, não do conjunto.
+        "truncados": truncados,
+        "capLista": 10,
     }
 
     # --- áreas longe do próprio estado --------------------------------------
@@ -923,14 +943,18 @@ function paineis() {
      demais editores.</p>
      <table><thead><tr><th>Mentor</th><th class="num">Afilh.</th>
      <th class="num">Ativos</th></tr></thead><tbody>
-     ${mt.top.map(([u, uf, n, viv]) => `<tr>
+     ${mt.top.map(([u, uf, n, lst, viv]) => `<tr>
         <td>${link(u)} <span class="chip">${uf || "--"}</span></td>
-        <td class="num">${n}</td><td class="num">${viv}</td></tr>`).join("")}
+        <td class="num">${n}${n > lst ? "*" : ""}</td>
+        <td class="num">${viv}${n > lst ? "*" : ""}</td></tr>`).join("")}
      </tbody></table>`
      : `<p style="color:var(--muted)">Sem dados de afilhados nesta coleta.</p>`}
     <p style="color:var(--muted);font-size:.8rem;margin:10px 0 0">
     ${NF.format(mt.mentores)} editores aparecem como mentores, com
-    ${NF.format(mt.afilhados)} afilhados nomeados.</p></div>`);
+    ${NF.format(mt.afilhados)} afilhados nomeados.${mt.truncados
+      ? ` <span style="opacity:.8">* a API lista no máximo ${mt.capLista}
+          afilhados por mentor, então para ${NF.format(mt.truncados)} deles a
+          coluna de ativos sai de uma amostra.</span>` : ""}</p></div>`);
 
   if (p.forasteiros.length) {
     blocos.push(`<div class="painel"><h2>Cuidam de longe</h2>
