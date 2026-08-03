@@ -564,6 +564,8 @@ PAGE = r"""<meta charset="utf-8">
        color:var(--muted); font-weight:600; position:sticky; top:0;
        background:var(--card); white-space:normal }
   tr:last-child td { border-bottom:none }
+  tbody tr:nth-child(even) { background:color-mix(in srgb, var(--chip) 45%, transparent) }
+  tbody tr:hover { background:color-mix(in srgb, var(--series) 8%, transparent) }
   td.num, th.num { text-align:right }
   .pos { color:var(--muted); width:46px }
   .name { font-weight:600; width:99%; white-space:normal; line-height:1.35;
@@ -591,9 +593,12 @@ PAGE = r"""<meta charset="utf-8">
              grid-template-columns:repeat(auto-fit,minmax(320px,1fr)) }
   .painel { background:var(--card); border:1px solid var(--line);
             border-radius:12px; padding:16px 18px }
-  .barra { display:grid; grid-template-columns:42px 1fr auto; gap:10px;
-           align-items:center; margin:5px 0; font-size:.85rem }
-  .barra span:first-child { color:var(--muted) }
+  .barra { display:grid; grid-template-columns:minmax(2.4rem,max-content) 1fr auto;
+           gap:10px; align-items:center; margin:5px 0; font-size:.85rem }
+  /* o rótulo cresce até um teto e então corta com reticências; o texto inteiro
+     continua no title da barra. Sem isso, nome de cidade invade o gráfico. */
+  .barra span:first-child { color:var(--muted); max-width:8rem; white-space:nowrap;
+                            overflow:hidden; text-overflow:ellipsis }
   .barra .t { background:var(--grid); border-radius:4px; height:9px }
   .barra .f { background:var(--series); border-radius:4px; height:9px;
               min-width:2px }
@@ -645,8 +650,8 @@ PAGE = r"""<meta charset="utf-8">
     <table>
       <thead><tr>
         <th class="pos" id="thPos">#</th><th id="thEditor">Editor</th>
-        <th class="num" id="thJanela">Edições</th>
         <th class="c-spark" id="thSpark">90 dias</th>
+        <th class="num" id="thJanela">Edições</th>
         <th class="num c-seq" id="thSeq">Seq.</th>
         <th class="num c-tend" id="thTend">Tend.</th>
         <th class="num c-hist" id="thHist">Histórico</th>
@@ -794,15 +799,16 @@ function render() {
           >${e[1] || "--"}</span>${e[2]
           ? `<span class="chip" title="${AJUDA.nivel}">N${e[2]}</span>` : ""
           }${selos(e)}</span></td>
-      <td class="num">${NF.format(e[c])}</td>
       <td class="c-spark">${faisca(e[9])}</td>
+      <td class="num">${NF.format(e[c])}</td>
       <td class="num c-seq" title="${e[7] ? e[7] + " dia(s) seguidos editando" : "Não está numa sequência"}">${e[7] || ""}</td>
       <td class="num c-tend">${tend(e[8])}</td>
       <td class="num c-hist" title="${NF.format(e[3])} edições desde a primeira">${NF.format(e[3])}</td>
     </tr>`).join("");
   $("empty").hidden = lista.length > 0;
   $("thJanela").textContent =
-    aba === "tot" ? "Edições" : "Edições (" + ABAS.find((a) => a[0] === aba)[1] + ")";
+    aba === "tot" ? "Edições" : "Edições · " + ABAS.find((a) => a[0] === aba)[1]
+      .replace(" dias", "d");
   $("thJanela").title = AJUDA.janela[aba] + (aba === "tot" ? "" : AJUDA.janelaExtra);
 }
 
@@ -844,13 +850,13 @@ function calendario(p) {
         }</title></rect>${anel}`;
   }).join("");
   const rotulos = [0, 2, 4, 6].map((d) =>
-    `<text x="-6" y="${d * (L + G) + L - 3}" text-anchor="end" font-size="9"
+    `<text x="-5" y="${d * (L + G) + L - 3.5}" text-anchor="end" font-size="6.5"
        fill="var(--axis)">${["seg","ter","qua","qui","sex","sáb","dom"][d]}</text>`).join("");
   const destaque = dias.filter((d) => d[2]);
 
-  return `<div class="painel largo"><h2>Calendário — edições por dia no Brasil</h2>
+  return `<div class="painel largo"><h2>Calendário de edições</h2>
     <div style="overflow:visible">
-    <svg viewBox="-26 -4 ${SEM * (L + G) + 30} ${7 * (L + G) + 8}"
+    <svg viewBox="-20 -4 ${SEM * (L + G) + 24} ${7 * (L + G) + 8}"
          style="width:100%;max-width:640px;height:auto" role="img"
          aria-label="Calendário de edições diárias nos últimos ${D.cfg.janela} dias">
       ${rotulos}${celulas}
@@ -888,7 +894,7 @@ function mapaAtividade(a) {
        <span style="width:12px;height:12px;border-radius:3px;background:var(--series);
                     opacity:${o};display:inline-block"></span>${rot}</span>`).join("");
 
-  return `<div class="painel largo"><h2>Onde o mapa está sendo editado</h2>
+  return `<div class="painel largo"><h2>Onde se edita agora</h2>
     <svg viewBox="0 0 ${a.nx} ${a.ny}" style="width:100%;max-width:520px;height:auto;
          display:block;margin:0 auto" shape-rendering="crispEdges" role="img"
          aria-label="Mapa das edições mais recentes no Brasil">${grade}${cells}</svg>
@@ -908,16 +914,19 @@ function mapaAtividade(a) {
 function cidadesEtipos(a) {
   if (!a.edicoes) return "";
   const totTipos = a.tipos.reduce((s, [, v]) => s + v, 0) || 1;
-  const ROT = { MapUpdateRequest: "pedido de correção", Segment: "segmento",
+  const ROT = { MapUpdateRequest: "pedido", Segment: "segmento",
     Venue: "local", Node: "nó", PermanentHazard: "alerta fixo",
-    Street: "via", HouseNumber: "numeração", RoadClosure: "bloqueio" };
-  return `<div class="painel"><h2>Cidades com mais edições recentes</h2>
+    Street: "via", HouseNumber: "numeração", RoadClosure: "bloqueio",
+    MapCorrection: "correção", SegmentSuggestion: "sugestão de via",
+    Camera: "câmera", MapComment: "comentário", BigJunction: "entroncamento",
+    RoutingPreference: "preferência de rota" };
+  return `<div class="painel"><h2>Cidades mais editadas</h2>
     ${barras(a.cidades.map(([c, n]) => [c, n]), (v) => NF.format(v),
       (k, v) => v + " das edições recentes coletadas caíram em " + k + ".")}
     <p style="color:var(--muted);font-size:.8rem;margin:10px 0 0">
     O Waze só nomeia a cidade em ${Math.round(100 * a.comCidade / a.edicoes)}% das
     edições; as demais entram no mapa mas não nesta lista.</p></div>
-    <div class="painel"><h2>O que está sendo mexido agora</h2>
+    <div class="painel"><h2>O que está sendo mexido</h2>
     ${barras(a.tipos.slice(0, 8).map(([k, v]) => [ROT[k] || k, v]),
              (v) => Math.round(100 * v / totTipos) + "%",
              (k, v) => NF.format(v) + " operações do tipo " + k +
@@ -952,7 +961,7 @@ function mapa(m) {
                     opacity:${o};display:inline-block"></span>${rot}</span>`).join("");
 
   return `<div class="painel" style="grid-column:1/-1">
-    <h2>Cobertura de área gerenciada</h2>
+    <h2>Cobertura de gerentes</h2>
     <svg viewBox="0 0 ${m.nx} ${m.ny}" style="width:100%;max-width:520px;
          height:auto;display:block;margin:0 auto" shape-rendering="crispEdges"
          role="img" aria-label="Mapa de cobertura de gerentes de área no Brasil">
@@ -961,7 +970,7 @@ function mapa(m) {
     <p style="margin:12px 0 0;font-size:.8rem;color:var(--muted)">${legenda}</p>
     <p style="color:var(--muted);font-size:.8rem;margin:8px 0 0">
       ${NF.format(m.editores)} dos editores ativos gerenciam
-      ${NF.format(m.areas)} áreas. Cada quadrado tem ${D.cfg.celulaGrau}° de lado
+      ${NF.format(m.areas)} áreas. Cada quadrado tem ${String(D.cfg.celulaGrau).replace(".", ",")}° de lado
       (~${D.cfg.celulaKm} km) e a cor
       diz quantos editores distintos o cobrem; onde não há quadrado, nenhum
       editor ativo gerencia. Projeção simples por latitude e longitude, sem
@@ -974,7 +983,7 @@ function paineis() {
   const p = D.paineis;
   const blocos = [];
 
-  blocos.push(`<div class="painel largo"><h2>Estados — quem seguraria a queda</h2>
+  blocos.push(`<div class="painel largo"><h2>Estados e fator de ônibus</h2>
     <table><thead><tr>
     <th title="Sigla do estado, deduzida de qual ranking estadual os editores aparecem.">UF</th>
     <th class="num" title="Total de edições feitas no estado nos últimos ${D.cfg.janela} dias.">Edições</th>
@@ -999,14 +1008,14 @@ function paineis() {
     mais da metade — ${NF.format(D.resumo.fator1)} estados estão nessa
     situação.</p></div>`);
 
-  blocos.push(`<div class="painel"><h2>Concentração — quem sustenta o mapa</h2>
+  blocos.push(`<div class="painel"><h2>Concentração</h2>
     ${barras(p.concentracao.map(([n, pc]) => ["top " + n, pc]), (v) => v + "%",
       (k, v) => "Os " + k.replace("top ", "") + " editores mais produtivos dos últimos " +
                 D.cfg.janela + " dias somam " + v + "% de tudo que foi editado no país.")}
     <p style="color:var(--muted);font-size:.8rem;margin:10px 0 0">
     Fatia das edições dos últimos ${D.cfg.janela} dias.</p></div>`);
 
-  blocos.push(`<div class="painel"><h2>Safras — entrada e sobrevivência</h2>
+  blocos.push(`<div class="painel"><h2>Safras de entrada</h2>
     ${p.entrada.map(([ano, n, viv]) => {
       const max = Math.max(...p.entrada.map((r) => r[1])) || 1;
       const pct = n ? Math.round(100 * viv / n) : 0;
@@ -1028,7 +1037,7 @@ function paineis() {
     <span style="opacity:.7">* menos de ${D.cfg.safraMin} pessoas — o percentual
     oscila demais para significar algo.</span></p></div>`);
 
-  blocos.push(`<div class="painel"><h2>Vigília — produziam e emudeceram</h2>
+  blocos.push(`<div class="painel"><h2>Produziam e pararam</h2>
     ${p.evasao.length ? `<table><thead><tr>
     <th title="Editor que produzia no começo da janela e parou.">Editor</th>
     <th class="num" title="Edições feitas nos primeiros ${D.cfg.meta} dias da janela — o que a pessoa estava produzindo antes de sumir.">Antes</th>
@@ -1063,7 +1072,7 @@ function paineis() {
     Do top ${D.cfg.topParados} histórico, os que fizeram menos de
     ${D.cfg.paradoMax} edições nos últimos ${D.cfg.janela} dias.</p></div>`);
 
-  blocos.push(`<div class="painel"><h2>Ritmo semanal — ${D.cfg.janela} dias</h2>
+  blocos.push(`<div class="painel"><h2>Ritmo semanal</h2>
     ${barras(p.semana, (v) => NF.format(v),
       (k, v) => NF.format(v) + " edições caíram numa " + k + " ao longo dos últimos " +
                 D.cfg.janela + " dias, somando todas as pessoas.")}
@@ -1202,8 +1211,10 @@ function build() {
   const c = D.cfg;
   [["fRank", c.rankings], ["fUf", c.ufs], ["fCap", c.cap], ["fCap2", c.cap],
    ["fVet", c.vetorDias], ["fMeta", c.meta], ["fMeta2", c.meta],
-   ["fAno", c.primeiroAno], ["fMin", c.safraMin]]
+   ["fMin", c.safraMin]]
     .forEach(([id, v]) => { const el = $(id); if (el) el.textContent = NF.format(v); });
+  // ano é ano: 2009, não 2.009
+  if ($("fAno")) $("fAno").textContent = String(c.primeiroAno);
   const e = D.estat || {};
   if ($("fGap")) $("fGap").textContent = (e.foraPct || 0) + "%";
   if ($("fZero")) $("fZero").textContent = (e.semEdicaoPct || 0) + "%";
