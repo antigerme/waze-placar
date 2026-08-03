@@ -66,17 +66,75 @@ for nome, url in re.findall(r'^([A-Z_]+) = "(https://[^"]+)"', waze_src, re.M):
 
 
 # ------------------------------------- 4. nada de número literal na prosa
+# Por muito tempo esta checagem só olhava dentro de <p> e <h2>, e a maior parte
+# do texto da página não está lá: está nas dicas de hover, nos rótulos de aba e
+# nos title= das colunas. Passavam "últimos 90 dias" e "45 anteriores" escritos
+# à mão, que ficariam falsos no dia em que a constante mudasse. Agora as três
+# origens são conferidas juntas.
 pagina = (SCRIPTS / "pagina.py").read_text(encoding="utf-8")
 tpl = pagina[pagina.find('PAGE = r"""'):]
-for m in re.finditer(r"<(p|h2)[^>]*>(.*?)</\1>", tpl, re.S):
-    txt = re.sub(r"\s+", " ", m.group(2)).strip()
-    # ignora índice de slice e aritmética de porcentagem, que não são prosa
-    limpo = re.sub(r"\.slice\([^)]*\)", "", txt)
-    limpo = re.sub(r"Math\.round\([^)]*\)", "·", limpo)
-    achados = re.findall(r'(?<![\w$.{#"\-/])\b(\d{2,})\b', limpo)
+# o <style> tem número por todo lado e não é texto para ninguém ler
+sem_css = re.sub(r"<style>.*?</style>", "", tpl, flags=re.S)
+
+
+def _sem_interp(s):
+    """Troca cada ${...} por '·', casando chaves.
+
+    Precisa contar chaves em vez de usar regex: as interpolações aninham
+    template literal e aspas, e um regex ingênuo corta no meio e inventa
+    número onde não há.
+    """
+    out, i = [], 0
+    while i < len(s):
+        if s.startswith("${", i):
+            nivel, j = 1, i + 2
+            while j < len(s) and nivel:
+                if s[j] == "{":
+                    nivel += 1
+                elif s[j] == "}":
+                    nivel -= 1
+                j += 1
+            out.append("·")
+            i = j
+        else:
+            out.append(s[i])
+            i += 1
+    return "".join(out)
+
+
+limpo_tpl = _sem_interp(sem_css)
+
+
+def _numeros(txt):
+    """Números escritos à mão num pedaço de texto da página.
+
+    As aspas ficaram fora do lookbehind de propósito: com elas, um rótulo
+    inteiro como "90 dias" passava batido, porque o número encostava na aspa
+    de abertura. Era assim que os rótulos das abas escapavam.
+    """
+    return re.findall(r'(?<![\w$.{#\-/])\b(\d{2,})\b', txt)
+
+
+alvos = []
+for m in re.finditer(r"<(p|h2|th|td)[^>]*>(.*?)</\1>", limpo_tpl, re.S):
+    alvos.append(("prosa", m.group(2)))
+for m in re.finditer(r'title="([^"]*)"', limpo_tpl):
+    alvos.append(("dica", m.group(1)))
+# o objeto AJUDA inteiro, que é só texto de hover
+aj = re.search(r"const AJUDA = \{(.*?)\n\};", limpo_tpl, re.S)
+if aj:
+    alvos.append(("dica", aj.group(1)))
+# os rótulos das abas
+tabs = re.search(r"const ABAS = \[(.*?)\];", limpo_tpl, re.S)
+if tabs:
+    # o terceiro item de cada aba é índice de coluna, não texto
+    alvos.append(("dica", re.sub(r",\s*\d+\]", "]", tabs.group(1))))
+
+for origem, txt in alvos:
+    achados = _numeros(re.sub(r"\s+", " ", txt).strip())
     if achados:
-        erro("prosa", "número literal {} em: {}".format(
-            achados, re.sub(r"<[^>]+>", "", limpo)[:70]))
+        erro(origem, "número literal {} em: {}".format(
+            achados, re.sub(r"<[^>]+>", "", txt).strip()[:70]))
 
 
 # --------------------------------------- 5. lista de painéis no README

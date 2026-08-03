@@ -9,19 +9,42 @@ from collections import Counter, defaultdict
 import waze
 
 DIAS = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"]
-BUCKETS = 15          # 15 baldes de 6 dias = os 90 dias completos
+BUCKETS = 15          # baldes da faísca; BUCKETS * BUCKET_DIAS = JANELA
 BUCKET_DIAS = 6
+VETOR = 91            # posições que o perfil devolve: a janela mais hoje
 
 # Os textos da página derivam destes valores. Nada de número escrito à mão na
-# prosa: se um limiar mudar aqui, a explicação muda junto.
+# prosa nem nas dicas de hover: se um limiar mudar aqui, a explicação muda
+# junto. Tudo que a página menciona sai daqui para o `cfg` e de lá para o texto.
 JANELA = 90           # dias fechados do vetor de atividade
+JANELA_MEDIA = 30     # aba do meio
+JANELA_CURTA = 7      # aba mais curta
 META_DIAS = 45        # metade da janela, base da tendência
 EVASAO_DIAS = 21      # silêncio que liga o alerta
 EVASAO_MIN = 300      # produção mínima na 1ª metade para entrar na vigília
 TOP_PARADOS = 60      # recorte do histórico para os "gigantes parados"
+PARADO_MAX = 100      # abaixo disto na janela é "praticamente não edita"
 SAFRA_MIN = 10        # tamanho mínimo de safra para a taxa significar algo
 SAFRA_MADURA = 5      # anos para a safra ter tido tempo de perder quem ia sair
 CAP_RANKING = 500     # teto de linhas por ranking, imposto pela API
+RECENTE_DIAS = 14     # "ainda ativo" para quem acabou de estrear
+CAL_DESVIOS = 2       # desvios da mediana para o dia entrar como fora da curva
+CONC_FAIXAS = (5, 10, 25, 50, 100)   # cortes do painel de concentração
+CONC_KPI = 50         # qual dos cortes vira KPI; precisa estar em CONC_FAIXAS
+
+# Tendência: variação entre as duas metades da janela.
+TEND_MIN = 200        # volume mínimo para a razão significar algo
+TEND_BANDA = 10       # variação em % dentro da qual o ritmo é "estável"
+
+# Ritmo: maratonista ou velocista.
+RITMO_MIN = 500       # edições na janela para valer a pena classificar
+RITMO_DIAS = 60       # dias com edição para ser "constante"
+RITMO_PICO_MAX = 10   # % do total no maior dia, teto do "constante"
+RITMO_PICO_MIN = 25   # % do total no maior dia, piso do "explosivo"
+
+# A API de transações devolve sempre as N últimas edições de cada editor.
+# Está aqui porque a página cita o número ao explicar de onde vem o mapa.
+TRANSACOES_POR_EDITOR = 10
 
 
 def _streak(act):
@@ -42,7 +65,7 @@ def _tendencia(act):
     alguma coisa — senão 3 edições contra 1 viram '+200%'.
     """
     a, b = sum(act[:META_DIAS]), sum(act[META_DIAS:JANELA])
-    if a + b < 200:
+    if a + b < TEND_MIN:
         return None
     if a == 0:
         return 999
@@ -55,9 +78,9 @@ TIPOS = {
     "houseNumber": "numeração", "machineMapProblem": "MP auto",
     "schedule": "horários",
 }
-# Qual especialidade é a maioria muda conforme a aba: entre os ativos são
-# segmentos, entre os 2.200 do histórico são locais. Esmaecer a errada
-# destacaria justamente o comum, então isto é calculado por aba.
+# Qual especialidade é maioria muda conforme a aba — entre os ativos não é a
+# mesma que no histórico inteiro. Esmaecer a errada destacaria justamente o
+# comum, então isto é medido por aba, não fixado aqui.
 
 
 def _especialidade(tipos):
@@ -71,18 +94,18 @@ def _especialidade(tipos):
 def _ritmo(act, d90):
     """Maratonista ou velocista.
 
-    Só classifica quem tem volume: com 30 edições no trimestre, 'explosivo'
+    Só classifica quem tem volume: com pouca edição no trimestre, 'explosivo'
     diria mais sobre o acaso do que sobre a pessoa.
     """
-    if d90 < 500:
+    if d90 < RITMO_MIN:
         return None
     dias = act[:-1]
     ativos = sum(1 for v in dias if v > 0)
     pico = max(dias) if dias else 0
-    conc = pico / d90 if d90 else 0
-    if ativos >= 60 and conc <= 0.10:
+    conc = 100 * pico / d90 if d90 else 0
+    if ativos >= RITMO_DIAS and conc <= RITMO_PICO_MAX:
         return "constante"
-    if conc >= 0.25:
+    if conc >= RITMO_PICO_MIN:
         return "explosivo"
     return None
 
@@ -165,10 +188,13 @@ def prepara(perfis, ufs, gerado, areas=None, estat=None, extras=None,
     eds = []
     for p in perfis:
         act = (p.get("activity") or [])
-        if len(act) < 91:                      # normaliza vetores curtos
-            act = [0] * (91 - len(act)) + list(act)
-        completos = act[:-1]                   # 90 dias fechados
-        d7, d30, d90 = sum(act[-8:-1]), sum(act[-31:-1]), sum(completos)
+        if len(act) < VETOR:                   # normaliza vetores curtos
+            act = [0] * (VETOR - len(act)) + list(act)
+        completos = act[:-1]                   # a janela fechada, sem hoje
+        # -1 sempre porque o dia de hoje ainda está correndo e sai da conta
+        d7 = sum(act[-JANELA_CURTA - 1:-1])
+        d30 = sum(act[-JANELA_MEDIA - 1:-1])
+        d90 = sum(completos)
         semanas = [sum(completos[i * BUCKET_DIAS:(i + 1) * BUCKET_DIAS])
                    for i in range(BUCKETS)]
         ano = inicio = None
@@ -178,7 +204,8 @@ def prepara(perfis, ufs, gerado, areas=None, estat=None, extras=None,
         eds.append({
             "u": p["username"], "uf": ufs.get(p["username"]),
             "lvl": p.get("level"), "tot": p.get("edits") or 0,
-            "d7": d7, "d30": d30, "d90": d90, "d14": sum(act[-15:-1]),
+            "d7": d7, "d30": d30, "d90": d90,
+            "recente": sum(act[-RECENTE_DIAS - 1:-1]),
             "inicio": inicio,
             "streak": _streak(act), "tend": _tendencia(act),
             "semanas": semanas if d90 > 0 else None, "ano": ano,
@@ -224,7 +251,10 @@ def prepara(perfis, ufs, gerado, areas=None, estat=None, extras=None,
     # A guarda de divisão fica na divisão. Somando `or 1` no total, uma coleta
     # sem atividade diária publicava "1 edições em 90 dias".
     concentracao = [[n, round(100 * sum(e["d90"] for e in por90[:n]) / (tot90 or 1), 1)]
-                    for n in (5, 10, 25, 50, 100)]
+                    for n in CONC_FAIXAS]
+    # O KPI é procurado pelo corte, não por posição na lista: com índice fixo,
+    # mexer em CONC_FAIXAS trocaria o número sem trocar o rótulo.
+    conc_kpi = dict(concentracao)[CONC_KPI]
 
     # Safras: quantos entraram em cada ano e quantos desses ainda editam.
     safras = defaultdict(lambda: [0, 0])
@@ -238,7 +268,7 @@ def prepara(perfis, ufs, gerado, areas=None, estat=None, extras=None,
     por_total = sorted(eds, key=lambda e: -e["tot"])
     parados = [[e["u"], e["uf"], e["tot"], e["d90"], i + 1, e["silencio"]]
                for i, e in enumerate(por_total[:TOP_PARADOS])
-               if e["d90"] < 100][:12]
+               if e["d90"] < PARADO_MAX][:12]
 
     # Fator de ônibus: quantos editores precisam sair para o estado perder
     # metade das edições. Um estado com fator 1 está a uma desistência de parar.
@@ -304,11 +334,11 @@ def prepara(perfis, ufs, gerado, areas=None, estat=None, extras=None,
         if not e["inicio"] or e["inicio"] < d0:
             continue
         novatos.append([e["u"], e["uf"], e["inicio"].isoformat(), e["d90"],
-                        1 if e["d14"] > 0 else 0])
+                        1 if e["recente"] > 0 else 0])
     novatos.sort(key=lambda r: -r[3])
     novatos_vivos = sum(1 for r in novatos if r[4])
 
-    # --- calendário de 91 dias, com os dias fora da curva --------------------
+    # --- calendário da janela, com os dias fora da curva --------------------
     ordenado = sorted(diario)
     mediana = ordenado[len(ordenado) // 2] if ordenado else 0
     if len(diario) > 1:
@@ -320,9 +350,9 @@ def prepara(perfis, ufs, gerado, areas=None, estat=None, extras=None,
     for i, v in enumerate(diario):
         fora = 0
         if desvio:
-            if v > mediana + 2 * desvio:
+            if v > mediana + CAL_DESVIOS * desvio:
                 fora = 1
-            elif v < mediana - 2 * desvio:
+            elif v < mediana - CAL_DESVIOS * desvio:
                 fora = -1
         calendario.append([(d0 + dt.timedelta(days=i)).isoformat(), v, fora])
 
@@ -407,9 +437,9 @@ def prepara(perfis, ufs, gerado, areas=None, estat=None, extras=None,
     cidades = Counter()
     tipos_tx = Counter()
     dias_tx = []
-    # As "dez últimas" de quem edita pouco podem ser de anos atrás — medido, há
-    # transação de 3.927 dias. Num painel sobre onde se edita agora, isso
-    # mancharia o mapa com trabalho de 2015; fora da janela, fora da conta.
+    # As últimas transações de quem edita pouco podem ser de muitos anos atrás
+    # (ver docs/api-recon.md). Num painel sobre onde se edita agora, isso
+    # mancharia o mapa com trabalho antigo; fora da janela, fora da conta.
     antigas = sum(1 for t in transacoes if (t.get("dias") or 0) > JANELA)
     for t in transacoes:
         if (t.get("dias") or 0) > JANELA:
@@ -453,20 +483,34 @@ def prepara(perfis, ufs, gerado, areas=None, estat=None, extras=None,
         "tipoComum": tipo_comum,
         "cfg": {
             "rankings": (len(waze.UFS) + 1) * len(waze.PERIODS),
+            "quadros": len(waze.UFS) + 1,
+            "janelasApi": len(waze.PERIODS),
             "ufs": len(waze.UFS),
             "cap": CAP_RANKING,
             "janela": JANELA,
+            "janelaMedia": JANELA_MEDIA,
+            "janelaCurta": JANELA_CURTA,
             "meta": META_DIAS,
             "evasaoDias": EVASAO_DIAS,
             "topParados": TOP_PARADOS,
             "celulaGrau": CELULA,
             "celulaKm": round(CELULA * 111),
-            "vetorDias": 91,
+            "vetorDias": VETOR,
             "safraMin": SAFRA_MIN,
             "safraMadura": SAFRA_MADURA,
             # o ano em que o editor mais antigo do país começou
             "primeiroAno": min([e["ano"] for e in eds if e["ano"]] or [0]),
-            "paradoMax": 100,        # limiar de "praticamente não edita"
+            "paradoMax": PARADO_MAX,
+            "recenteDias": RECENTE_DIAS,
+            "calDesvios": CAL_DESVIOS,
+            "concKpiN": CONC_KPI,
+            "baldes": BUCKETS,
+            "baldeDias": BUCKET_DIAS,
+            "tendBanda": TEND_BANDA,
+            "ritmoDias": RITMO_DIAS,
+            "ritmoPicoMax": RITMO_PICO_MAX,
+            "ritmoPicoMin": RITMO_PICO_MIN,
+            "transacoesPorEditor": TRANSACOES_POR_EDITOR,
             "semAtividade": sem_atividade,
         },
         "estat": estat,
@@ -476,7 +520,7 @@ def prepara(perfis, ufs, gerado, areas=None, estat=None, extras=None,
             "historico": len(eds),
             "edicoesTotal": sum(e["tot"] for e in eds),
             "edicoes90": tot90,
-            "top50": concentracao[3][1],
+            "concKpi": conc_kpi,
             "deltaFds": delta_fds,
             "retencao": retencao,
             "faixaRetencao": faixa,
@@ -676,7 +720,7 @@ PAGE = r"""<meta charset="utf-8">
     <table>
       <thead><tr>
         <th class="pos" id="thPos">#</th><th id="thEditor">Editor</th>
-        <th class="c-spark" id="thSpark">90 dias</th>
+        <th class="c-spark" id="thSpark"></th>
         <th class="num" id="thJanela">Edições</th>
         <th class="num c-seq" id="thSeq">Seq.</th>
         <th class="num c-tend" id="thTend">Tend.</th>
@@ -691,11 +735,12 @@ PAGE = r"""<meta charset="utf-8">
 
   <footer>
     <p><b>De onde vem.</b> A lista de editores sai de <span id="fRank"></span>
-    rankings do Waze — o nacional e os <span id="fUf"></span> estaduais, nas três
-    janelas que a API oferece, <span id="fCap"></span> linhas cada. As três
-    entram porque o ranking histórico ordena por pontos acumulados: nesta
-    coleta, <span id="fGap"></span> dos editores ativos não apareceriam se só
-    ele fosse varrido. A atividade diária vem do perfil de
+    rankings do Waze: os <span id="fQuad"></span> quadros — o nacional e os
+    <span id="fUf"></span> estaduais — em cada uma das
+    <span id="fJan"></span> janelas que a API oferece, <span id="fCap"></span>
+    linhas cada. Todas as janelas entram porque o ranking histórico ordena por
+    pontos acumulados: nesta coleta, <span id="fGap"></span> dos editores
+    ativos não apareceriam se só ele fosse varrido. A atividade diária vem do perfil de
     cada editor, que expõe os últimos <span id="fVet"></span> dias. Como os
     rankings estaduais não se sobrepõem, a UF de cada um vem da varredura.</p>
     <p><b>Por que ordenar por atividade.</b> Os rankings do Waze ordenam por
@@ -723,35 +768,39 @@ const perfil = (u) => "https://www.waze.com/user/editor/" + encodeURIComponent(u
 const $ = (id) => document.getElementById(id);
 
 // Toda a ajuda de hover num lugar só, para poder ser lida e revisada de uma vez.
+// Nenhum número aqui é escrito à mão: todos saem do cfg, que sai das constantes
+// do pagina.py. Mudar um limiar lá muda a explicação aqui.
+const C = D.cfg;
 const AJUDA = {
   pos: "Posição nesta aba. Como cada aba ordena por uma janela diferente, a mesma pessoa aparece em posições diferentes.",
   editor: "Nome no Waze. Clique para abrir o perfil. Logo abaixo vêm o estado, o nível e os selos.",
   janela: {
-    d30: "Edições feitas nos últimos 30 dias fechados.",
-    d7: "Edições feitas nos últimos 7 dias fechados.",
-    d90: "Edições feitas nos últimos 90 dias fechados.",
+    d30: `Edições feitas nos últimos ${C.janelaMedia} dias fechados.`,
+    d7: `Edições feitas nos últimos ${C.janelaCurta} dias fechados.`,
+    d90: `Edições feitas nos últimos ${C.janela} dias fechados.`,
     tot: "Total de edições desde a primeira, em toda a carreira.",
   },
   janelaExtra: " Vem do histórico diário do perfil; o dia de hoje, que ainda está correndo, fica de fora da soma.",
-  faisca: "Formato da atividade nos últimos 90 dias, em 15 blocos de 6 dias, do mais antigo ao mais recente. A altura é relativa ao melhor bloco da própria pessoa — serve para ver o ritmo dela, não para comparar com outra.",
+  faisca: `Formato da atividade nos últimos ${C.janela} dias, em ${C.baldes} blocos de ${C.baldeDias} dias, do mais antigo ao mais recente. A altura é relativa ao melhor bloco da própria pessoa — serve para ver o ritmo dela, não para comparar com outra.`,
   seq: "Dias seguidos com pelo menos uma edição, contados de trás para frente. Hoje não entra, porque o dia ainda não fechou.",
-  tend: "Compara o total dos últimos 45 dias com o dos 45 anteriores. Fica em branco para quem editou pouco no período, onde a razão diria mais sobre o acaso que sobre a pessoa.",
+  tend: `Compara o total dos últimos ${C.meta} dias com o dos ${C.meta} anteriores. Fica em branco para quem editou pouco no período, onde a razão diria mais sobre o acaso que sobre a pessoa.`,
   tot: "Total de edições da carreira inteira. Não muda conforme a aba escolhida.",
   uf: "Estado do editor, deduzido de qual ranking estadual ele aparece. Os rankings estaduais não se sobrepõem.",
-  nivel: "Nível de editor no Waze, de 1 a 6. Sobe com experiência e dá mais permissões no editor de mapas.",
+  nivel: "Nível de editor no Waze. Sobe com experiência e dá mais permissões no editor de mapas.",
   kpi: {
-    ativos: "Quantas pessoas fizeram ao menos uma edição nos últimos 30 dias. O total do histórico é muito maior porque inclui quem editou uma vez, anos atrás, e nunca voltou.",
-    edicoes: "Soma de todas as edições feitas no Brasil nos últimos 90 dias, por todos os editores que o placar acompanha.",
-    conc: "Fatia das edições dos últimos 90 dias que vem dos 50 editores mais produtivos. Quanto mais alto, mais o mapa depende de pouca gente.",
+    ativos: `Quantas pessoas fizeram ao menos uma edição nos últimos ${C.janelaMedia} dias. A aba Histórico traz mais gente: lá entra também quem editou uma vez, anos atrás, e nunca voltou.`,
+    edicoes: `Soma de todas as edições feitas no Brasil nos últimos ${C.janela} dias, por todos os editores que o placar acompanha.`,
+    conc: `Fatia das edições dos últimos ${C.janela} dias que vem dos ${C.concKpiN} editores mais produtivos. Quanto mais alto, mais o mapa depende de pouca gente.`,
     universo: "Quantos editores os rankings devolveram. É o universo inteiro que o placar enxerga, sem recorte de janela.",
     carreiras: "Soma do total de carreira de todos esses editores. Cobre desde a primeira edição de cada um, sem recorte de janela.",
-    fator1: "Estados em que um único editor responde por mais da metade das edições. Se essa pessoa parar, o estado perde metade do ritmo.",
+    fator1: "Estados em que um único editor responde por mais da metade das edições da janela. Quanto do mapa do estado saiu da mão de uma pessoa só.",
   },
 };
 
+// [chave, rótulo, índice da coluna em D.editores]
 const ABAS = [
-  ["d30", "30 dias", 5], ["d7", "7 dias", 4],
-  ["d90", "90 dias", 6], ["tot", "Histórico", 3],
+  ["d30", C.janelaMedia + " dias", 5], ["d7", C.janelaCurta + " dias", 4],
+  ["d90", C.janela + " dias", 6], ["tot", "Histórico", 3],
 ];
 let aba = "d30";
 
@@ -780,14 +829,14 @@ function faisca(sem) {
 // [.. 11=especialidade, 12=ritmo, 10=afilhados, 13=áreas]
 function selos(e) {
   const s = [];
-  // 4 em 5 editores são de segmento: esmaece o comum para os outros saltarem.
+  // esmaece a especialidade mais comum da aba para as outras saltarem.
   if (e[11]) s.push(`<span class="chip${e[11] === D.tipoComum[aba] ? " fraco" : ""}"
     title="Especialidade: ${esc(e[11])} é o tipo de edição que mais fez na carreira. Sai esmaecido quando é o tipo mais comum entre os editores desta aba."
     >${esc(e[11])}</span>`);
   if (e[12]) s.push(`<span class="chip"
     title="${e[12] === "constante"
-      ? "Ritmo constante: editou em 60 ou mais dos últimos 90 dias, e nenhum dia isolado passa de 10% do total. É quem aparece todo dia."
-      : "Ritmo explosivo: um único dia responde por 25% ou mais de tudo que fez em 90 dias. É quem trabalha em mutirão."}"
+      ? `Ritmo constante: editou em ${C.ritmoDias} ou mais dos últimos ${C.janela} dias, e nenhum dia isolado passa de ${C.ritmoPicoMax}% do total — produção espalhada, sem depender de um dia só.`
+      : `Ritmo explosivo: um único dia responde por ${C.ritmoPicoMin}% ou mais de tudo que fez em ${C.janela} dias.`}"
     >${e[12]}</span>`);
   if (e[10]) s.push(`<span class="chip"
     title="Mentor de ${e[10]} editor(es) novo(s) no Waze."
@@ -804,15 +853,15 @@ function tend(t) {
     return '<span class="flat"' + cap("Editou pouco demais no período para a comparação significar algo.") + ">—</span>";
   }
   if (t >= 999) {
-    return '<span class="up"' + cap("Não tinha nenhuma atividade nos primeiros 45 dias da janela: começou ou voltou a editar na segunda metade.") + ">↑ novo</span>";
+    return '<span class="up"' + cap(`Não tinha nenhuma atividade nos primeiros ${C.meta} dias da janela: começou ou voltou a editar na segunda metade.`) + ">↑ novo</span>";
   }
-  if (t > 10) {
-    return '<span class="up"' + cap("Fez " + t + "% mais edições nos últimos 45 dias do que nos 45 anteriores.") + ">↑ " + t + "%</span>";
+  if (t > C.tendBanda) {
+    return '<span class="up"' + cap(`Fez ${t}% mais edições nos últimos ${C.meta} dias do que nos ${C.meta} anteriores.`) + ">↑ " + t + "%</span>";
   }
-  if (t < -10) {
-    return '<span class="down"' + cap("Fez " + Math.abs(t) + "% menos edições nos últimos 45 dias do que nos 45 anteriores.") + ">↓ " + Math.abs(t) + "%</span>";
+  if (t < -C.tendBanda) {
+    return '<span class="down"' + cap(`Fez ${Math.abs(t)}% menos edições nos últimos ${C.meta} dias do que nos ${C.meta} anteriores.`) + ">↓ " + Math.abs(t) + "%</span>";
   }
-  return '<span class="flat"' + cap("Ritmo estável: a variação entre as duas metades da janela ficou dentro de 10%.") + ">→</span>";
+  return '<span class="flat"' + cap(`Ritmo estável: a variação entre as duas metades da janela ficou dentro de ${C.tendBanda}%.`) + ">→</span>";
 }
 
 function render() {
@@ -893,11 +942,11 @@ function calendario(p) {
     Cada quadrado é um dia; a intensidade é o total de edições do país.
     A mediana diária é <b>${NF.format(p.calMediana)}</b>.
     ${destaque.length
-      ? `Contornados, os <b>${destaque.length}</b> dias que fogem dois desvios da
-         mediana — ${destaque.map((d) => (d[2] > 0 ? "↑" : "↓") + " " +
+      ? `Contornados, os <b>${destaque.length}</b> dias que fogem
+         ${D.cfg.calDesvios} desvios da mediana — ${destaque.map((d) => (d[2] > 0 ? "↑" : "↓") + " " +
            d[0].slice(8, 10) + "/" + d[0].slice(5, 7)).join(", ")}.
          O que causou cada um não sai daqui.`
-      : "Nenhum dia foge dois desvios da mediana no período."}
+      : `Nenhum dia foge ${D.cfg.calDesvios} desvios da mediana no período.`}
     </p></div>`;
 }
 
@@ -929,8 +978,9 @@ function mapaAtividade(a) {
     <p style="margin:12px 0 0;font-size:.8rem;color:var(--muted)">${legenda}</p>
     <p style="color:var(--muted);font-size:.8rem;margin:8px 0 0">
       As <b>${NF.format(a.edicoes)}</b> edições mais recentes de
-      ${NF.format(a.editores)} editores — a API devolve as dez últimas de cada
-      um, e ficam só as dos últimos ${D.cfg.janela} dias.${a.descartadas
+      ${NF.format(a.editores)} editores — a API devolve as
+      ${D.cfg.transacoesPorEditor} últimas de cada um, e ficam só as dos
+      últimos ${D.cfg.janela} dias.${a.descartadas
         ? ` Outras ${NF.format(a.descartadas)} eram mais antigas que isso e
             saíram da conta.` : ""}
       Mesma grade do mapa de cobertura, para comparar: lá é onde há gerente,
@@ -1134,25 +1184,34 @@ function paineis() {
     }).join("")}
     <p style="color:var(--muted);font-size:.8rem;margin:10px 0 0">
     Barra é a fatia de cada nível que editou nos últimos ${D.cfg.janela} dias;
-    ao lado, quantos editores existem no nível. Sobe sem exceção do nível 1 ao
-    6.</p></div>`);
+    ao lado, quantos editores existem no nível.
+    ${(() => {
+      // Se o gradiente sobe do primeiro nível ao último, dizer que sobe. Se
+      // quebrar, dizer onde quebrou — nunca afirmar a forma sem conferir.
+      const t = p.niveis.map(([lv, n, viv]) => [lv, n ? viv / n : 0]);
+      const quebras = t.filter((v, i) => i > 0 && v[1] < t[i - 1][1]);
+      if (t.length < 2) return "";
+      if (!quebras.length) return `Sobe sem exceção do nível ${t[0][0]} ao ${t[t.length - 1][0]}.`;
+      return "Não sobe de ponta a ponta: cai " +
+        quebras.map(([lv]) => "no nível " + lv).join(" e ") + ".";
+    })()}</p></div>`);
 
   blocos.push(`<div class="painel"><h2>Chegaram na janela</h2>
     ${p.novatos.length ? `<table><thead><tr>
-    <th title="Quem fez a primeira edição da vida dentro da janela. O selo 'parou' marca quem não editou nas duas últimas semanas.">Editor</th>
+    <th title="Quem fez a primeira edição da vida dentro da janela. O selo 'parou' marca quem não editou nos últimos ${D.cfg.recenteDias} dias.">Editor</th>
     <th class="num" title="Data da primeiríssima edição da pessoa no Waze.">Desde</th>
     <th class="num" title="Quanto essa pessoa já produziu desde que começou, dentro da janela.">${D.cfg.janela} d</th>
     </tr></thead><tbody>
     ${p.novatos.map(([u, uf, desde, ed, vivo]) => `<tr>
       <td>${link(u)} <span class="chip">${uf || "--"}</span>${
-        vivo ? "" : ' <span class="chip" title="Não editou nas duas últimas semanas.">parou</span>'}</td>
+        vivo ? "" : ` <span class="chip" title="Não editou nos últimos ${D.cfg.recenteDias} dias.">parou</span>`}</td>
       <td class="num">${desde.slice(8,10)}/${desde.slice(5,7)}</td>
       <td class="num">${NF.format(ed)}</td></tr>`).join("")}
     </tbody></table>` : `<p style="color:var(--muted)">Ninguém estreou na janela.</p>`}
     <p style="color:var(--muted);font-size:.8rem;margin:10px 0 0">
     <b>${NF.format(p.novatosTotal)}</b> fizeram a primeira edição da vida dentro
-    da janela; <b>${NF.format(p.novatosVivos)}</b> ainda editaram nas duas
-    últimas semanas.</p></div>`);
+    da janela; <b>${NF.format(p.novatosVivos)}</b> ainda editaram nos
+    últimos ${D.cfg.recenteDias} dias.</p></div>`);
 
   const mt = p.mentoria;
   blocos.push(`<div class="painel"><h2>Mentoria</h2>
@@ -1165,8 +1224,9 @@ function paineis() {
      <p style="color:var(--muted);font-size:.8rem;margin:8px 0 12px">
      Fatia que editou nos últimos ${D.cfg.janela} dias, entre os
      ${NF.format(mt.rastreados)} apadrinhados e entre os demais editores. Os
-     dois lado a lado não mostram que apadrinhar faz ficar: quem procura mentor
-     provavelmente já é quem tenderia a continuar.</p>
+     dois lado a lado não mostram que apadrinhar faz ficar. Quem vira afilhado
+     não é sorteado, e esta coleta não tem como separar o efeito do
+     apadrinhamento de quem já ia continuar de todo jeito.</p>
      <table><thead><tr>
      <th title="Editor que apadrinha novatos no Waze.">Mentor</th>
      <th class="num" title="Quantos afilhados o Waze registra para essa pessoa.">Afilh.</th>
@@ -1231,16 +1291,18 @@ function build() {
     [NF.format(r.historico), "editores no ranking histórico", AJUDA.kpi.universo],
     [NF.format(r.edicoesTotal), "edições somadas nas carreiras", AJUDA.kpi.carreiras],
   ] : [
-    [NF.format(r.ativos30), "editores ativos nos últimos 30 dias", AJUDA.kpi.ativos],
-    [NF.format(r.edicoes90), "edições em 90 dias", AJUDA.kpi.edicoes],
-    [r.top50 + "%", "das edições vêm de 50 pessoas", AJUDA.kpi.conc],
+    [NF.format(r.ativos30), `editores ativos nos últimos ${C.janelaMedia} dias`, AJUDA.kpi.ativos],
+    [NF.format(r.edicoes90), `edições em ${C.janela} dias`, AJUDA.kpi.edicoes],
+    [r.concKpi + "%", `das edições vêm de ${C.concKpiN} pessoas`, AJUDA.kpi.conc],
     [NF.format(r.fator1), "estados dependem de um único editor", AJUDA.kpi.fator1],
   ]).map(([v, k, aj]) =>
     `<div class="kpi" title="${aj}"><b>${v}</b><span>${k}</span></div>`).join("");
 
   $("tabs").innerHTML = ABAS.filter(([k]) => !so || k === "tot").map(([k, rot]) =>
     `<button class="tab" role="tab" data-k="${k}" aria-selected="${k === aba}"
-       title="${AJUDA.janela[k]} O número ao lado é quantos editores têm ao menos uma edição nessa janela.">
+       title="${AJUDA.janela[k]} ${k === "tot"
+         ? "O número ao lado é o universo inteiro que o placar enxerga."
+         : "O número ao lado é quantos editores têm ao menos uma edição nessa janela."}">
        ${rot} <span style="opacity:.65">${NF.format(D.abas[k].length)}</span>
      </button>`).join("");
   $("tabs").onclick = (e) => {
@@ -1255,9 +1317,11 @@ function build() {
   [["thPos", AJUDA.pos], ["thEditor", AJUDA.editor], ["thSpark", AJUDA.faisca],
    ["thSeq", AJUDA.seq], ["thTend", AJUDA.tend], ["thHist", AJUDA.tot]]
     .forEach(([id, t]) => { const el = $(id); if (el) el.title = t; });
+  $("thSpark").textContent = C.janela + " dias";
 
   const c = D.cfg;
   [["fRank", c.rankings], ["fUf", c.ufs], ["fCap", c.cap], ["fCap2", c.cap],
+   ["fQuad", c.quadros], ["fJan", c.janelasApi],
    ["fVet", c.vetorDias], ["fMeta", c.meta], ["fMeta2", c.meta],
    ["fMin", c.safraMin]]
     .forEach(([id, v]) => { const el = $(id); if (el) el.textContent = NF.format(v); });

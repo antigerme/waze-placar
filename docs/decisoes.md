@@ -55,6 +55,29 @@ conselho que trocava a página boa de ontem por essa. Zero medido e zero por nã
 ter medido são coisas diferentes: hoje a página detecta que não há vetor diário
 e diz que só tem o acumulado, em vez de afirmar ausência de atividade.
 
+**Checar só metade do texto e achar que checou tudo.** A regra "nada de número
+à mão" existia desde cedo, e o `verificar.py` a cobrava — mas só dentro de
+`<p>` e `<h2>`. A maior parte do texto da página não mora lá: mora nas dicas de
+hover, nos `title=` das colunas, nos rótulos das abas e nos KPIs. Passaram
+"últimos 90 dias", "45 anteriores", "15 blocos de 6 dias", "50 pessoas", "60 ou
+mais dos últimos 90 dias" — uma dúzia de lugares que ficariam falsos no dia em
+que a constante mudasse, com a verificação dando ok o tempo todo. Uma checagem
+que cobre parte do alvo é pior que nenhuma: ela dá confiança.
+
+**Afirmar o formato do dado, não só o valor.** A página dizia que o gradiente
+de atividade por nível "sobe sem exceção do nível 1 ao 6". Era verdade quando
+foi escrito. Mas o `decisoes.md` já registrava, duas seções abaixo, que esse
+gradiente é o canário de coleta quebrada — ou seja, o dia em que a frase ficar
+falsa é exatamente o dia em que ela mais engana. Hoje o script confere e diz
+onde quebra. Vale para todo "sobe", "é raro", "quase todos": meça, ou não
+escreva.
+
+**Inventar o mecanismo ao dar a ressalva.** A nota de mentoria dizia que os
+dois números não provam causa "porque quem procura mentor provavelmente já é
+quem tenderia a continuar". A ressalva estava certa, a explicação não era
+medida — e provavelmente estava invertida, já que no Waze é o mentor que
+adiciona o afilhado (`AddMentee`). Dar a ressalva não autoriza inventar a razão.
+
 **Auditar layout com número de brinquedo.** O `auditar-layout.mjs` passava
 porque a página de teste tinha KPI de cinco dígitos. Com o total real, de oito,
 o cartão vazava em 390 e 768px. A auditoria só enxerga o que está na página que

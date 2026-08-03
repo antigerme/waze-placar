@@ -81,11 +81,18 @@ gerenciando área distante dos colegas de estado. Numa coleta `--sem-perfis` nã
 há vetor diário, então nenhum deles tem o que medir e a página diz isso em vez
 de mostrar painel zerado.
 
-**Todo texto da página é derivado dos dados.** Não há número escrito à mão na
-prosa: limiares vêm de constantes nomeadas no topo do `pagina.py`, e as
-afirmações ou são descrição do método ou são medidas na própria coleta. Isso é
-proposital — a versão anterior afirmava coisas que deixaram de ser verdade sem
-ninguém perceber.
+**Todo texto da página é derivado dos dados.** Não há número escrito à mão em
+lugar nenhum que alguém leia — nem na prosa, nem nas dicas de hover, nem nos
+`title=` das colunas, nem nos rótulos das abas. Cada limiar é uma constante
+nomeada no topo do `pagina.py`, viaja no `cfg` e é interpolado no texto: um
+valor, um lugar.
+
+As afirmações ou descrevem o método ou são medidas na coleta, inclusive as que
+falam do formato do dado. A página não diz que o gradiente de atividade por
+nível sobe — ela confere se sobe e, se não subir, diz onde quebra.
+
+Isso é proposital, e `scripts/verificar.py` cobra: a versão anterior afirmava
+coisas que deixaram de ser verdade sem ninguém perceber.
 
 ## Rodando diariamente no cron
 

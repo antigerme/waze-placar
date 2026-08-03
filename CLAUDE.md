@@ -16,16 +16,26 @@ de código, textos da página. Nomes de função e variável também.
 
 ## Regras que não se negociam
 
-**Nada de número escrito à mão na prosa da página.** Todo texto do
-`placar.html` ou descreve o método ou reporta algo medido na coleta. Limiares
-vêm das constantes nomeadas no topo do `pagina.py`, e o texto que os menciona
-lê da mesma constante. Isso já foi violado três vezes e produziu página
-afirmando coisas falsas.
+**Nada de número escrito à mão em nenhum texto da página.** Vale para a prosa,
+para as dicas de hover, para os `title=` das colunas e para os rótulos das
+abas — tudo isso é texto que alguém lê. Limiares vêm das constantes nomeadas no
+topo do `pagina.py`, viram campo do `cfg`, e o texto interpola de lá. Um valor,
+um lugar. Isso já foi violado várias vezes; da última, "últimos 90 dias" e "45
+anteriores" estavam escritos à mão em uma dúzia de dicas.
 
-**Não afirme causa.** Se a coleta mostra dois números lado a lado, mostre os
-dois. Explicar por que um número é o que é quase sempre significa sair do que
-foi medido — foi assim que a página passou a dizer que dias fora da curva
-"costumam ser mutirão", coisa que ninguém verificou.
+Número por extenso conta igual: "as três janelas" e "as dez últimas" são número
+escrito à mão e envelhecem do mesmo jeito.
+
+**Não afirme causa, nem forma.** Se a coleta mostra dois números lado a lado,
+mostre os dois. Explicar por que um número é o que é quase sempre significa
+sair do que foi medido — foi assim que a página passou a dizer que dias fora da
+curva "costumam ser mutirão".
+
+O mesmo vale para descrever o formato de um dado. A página afirmava que o
+gradiente de atividade por nível "sobe sem exceção do nível 1 ao 6": verdade no
+dia em que foi escrito, mentira no dia em que a coleta falhar num nível. Hoje
+ela confere e diz onde quebra. Se você for escrever "sobe", "é raro", "quase
+todos" — meça e deixe o script escrever a frase.
 
 **Rode `scripts/auditar-layout.mjs` depois de mexer no `pagina.py`.** Precisa de
 `npm i playwright`. Validar por métrica em Python já deixou passar uma tabela
@@ -46,8 +56,9 @@ deliberado. O teto do Waze nunca foi testado, de propósito.
 `scripts/verificar.py` roda sozinho ao fim de cada resposta, por um hook em
 `.claude/settings.json`. Ele falha e devolve o motivo quando a documentação
 descola do código: flag citada no README que não existe mais, endpoint novo sem
-entrada em `docs/api-recon.md`, número literal na prosa da página, ou seção
-perdida do `docs/decisoes.md`.
+entrada em `docs/api-recon.md`, número literal em qualquer texto da página
+(prosa, dica de hover, `title=` ou rótulo de aba), painel que o README não
+lista, ou seção perdida do `docs/decisoes.md`.
 
 Se ele reclamar, **atualize o documento** — não relaxe a checagem. Cada uma
 delas existe porque a coisa correspondente já desatualizou sem ninguém notar.
