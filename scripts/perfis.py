@@ -12,6 +12,7 @@ Uso:
 """
 
 import argparse
+import atexit
 import json
 import os
 import sys
@@ -35,6 +36,7 @@ def main() -> None:
     args = ap.parse_args()
 
     opener = waze.load_opener(args.cookies)
+    atexit.register(lambda: waze.salva_cookies(opener))
 
     if args.usuario:
         alvos = args.usuario

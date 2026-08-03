@@ -105,7 +105,49 @@ def load_opener(cookie_path: str) -> urllib.request.OpenerDirector:
             "{}: não achei o cookie _web_session de www.waze.com. "
             "Exporte os cookies com a sessão do waze.com aberta.".format(cookie_path)
         )
-    return urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+    op = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+    op.waze_jar = jar
+    op.waze_cookies = Path(cookie_path)
+    op.waze_sessao = _sessao(jar)
+    return op
+
+
+def _sessao(jar) -> Optional[str]:
+    for c in jar:
+        if c.name == "_web_session":
+            return c.value
+    return None
+
+
+def salva_cookies(opener) -> bool:
+    """Grava o jar de volta no arquivo, para a sessão renovada sobreviver.
+
+    O Waze responde os perfis com Set-Cookie de _web_session: a sessão é
+    rolante. Sem gravar, toda execução parte do cookie exportado à mão e a
+    sessão envelhece até morrer — que é o motivo de precisar reexportar.
+
+    Escreve num temporário e renomeia por cima, com modo 0600: uma queda no
+    meio da gravação não pode deixar o arquivo de credencial pela metade.
+    """
+    jar = getattr(opener, "waze_jar", None)
+    destino = getattr(opener, "waze_cookies", None)
+    if jar is None or destino is None:
+        return False
+    if _sessao(jar) == getattr(opener, "waze_sessao", None):
+        return False                      # nada renovou; não mexe no arquivo
+
+    tmp = destino.with_name("." + destino.name + ".tmp")
+    try:
+        jar.save(str(tmp), ignore_discard=True, ignore_expires=True)
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, destino)
+        return True
+    except OSError as exc:
+        # Cookie não gravado não invalida a coleta — só avisa e segue.
+        print("  aviso: não consegui gravar {}: {}".format(destino, exc),
+              file=sys.stderr)
+        _unlink(tmp)
+        return False
 
 
 def fetch(opener, url: str, params: dict, referer: str,

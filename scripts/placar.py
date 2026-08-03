@@ -18,6 +18,7 @@ Uso:
 import argparse
 import datetime as dt
 import json
+import atexit
 import os
 import sys
 import time
@@ -63,11 +64,18 @@ def main() -> None:
     ap.add_argument("--limit", type=int, help="usa só os N maiores (para teste)")
     ap.add_argument("--allow-partial", action="store_true",
                     help="publica mesmo se algum ranking falhar")
+    ap.add_argument("--nao-salvar-cookies", action="store_true",
+                    dest="nao_salvar_cookies",
+                    help="não regrava o arquivo de cookies com a sessão renovada")
     ap.add_argument("--quiet", action="store_true")
     args = ap.parse_args()
 
     inicio = time.time()
     opener = waze.load_opener(args.cookies)
+    # A sessão é rolante: gravar o jar de volta é o que evita ter de reexportar
+    # os cookies à mão. Vale mesmo se a coleta abortar no meio.
+    if not args.nao_salvar_cookies:
+        atexit.register(lambda: waze.salva_cookies(opener))
 
     if not args.quiet:
         print("varrendo os 28 rankings…", file=sys.stderr)

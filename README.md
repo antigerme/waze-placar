@@ -55,11 +55,39 @@ tentativas, o script aborta com saída 1 e **não escreve nada** — a página d
 anterior continua no ar. O mesmo vale para cookie expirado: HTTP 401 encerra
 antes de tocar no destino. Para publicar mesmo incompleto, `--allow-partial`.
 
+### A sessão se renova sozinha
+
+O Waze responde os perfis com `Set-Cookie` de `_web_session`: a sessão é
+rolante. O script grava o cookie jar de volta no arquivo ao terminar, então
+cada execução parte da sessão que a anterior renovou, em vez de partir sempre
+do mesmo cookie exportado à mão.
+
+Verificado em três execuções seguidas: o token rotaciona a cada uma
+(`R1pJ…` → `cDNV…` → `eDZr…`) e a seguinte autentica com o que a anterior
+gravou. A gravação é atômica e mantém modo `0600`.
+
+O que **não** acontece: o prazo absoluto do cookie não se move. Ele continua
+fixo na data em que a sessão foi criada no navegador — cerca de 30 dias. O que
+a renovação sustenta é o tempo ocioso do lado do servidor, que é bem mais curto
+e é o que fazia os perfis passarem a responder 403 depois de algumas horas.
+
+Na prática: rodando todo dia, espere semanas sem reexportar, e uma reexportação
+manual quando o prazo absoluto vencer. O script avisa no log quando chegar lá.
+
+`--nao-salvar-cookies` desliga a regravação.
+
+Como o arquivo virou uma credencial que precisa sobreviver a reinício, vale
+tirá-lo de `/tmp` — algo como `/etc/waze-placar/cookies.txt`, com
+`--cookies` apontando para lá.
+
 ### O que depende de você
 
-- **Cookies legíveis pelo usuário do cron.** Se você exporta como seu usuário
-  em modo 600 e o cron roda como root, tudo bem. Se roda como outro usuário,
-  ajuste dono ou modo do `/tmp/cookies.txt`.
+- **Cookies legíveis e graváveis pelo usuário do cron.** O script agora
+  regrava o arquivo. Se você exporta como seu usuário em modo 600 e o cron roda
+  como root, tudo bem; se roda como outro usuário, ajuste dono ou modo.
+- **Não reexporte por cima durante uma execução.** A gravação acontece no fim,
+  e sobrescreveria a exportação nova com a sessão da execução em andamento.
+  Ambas seriam válidas, mas a mais nova se perde.
 - **Contexto SELinux do diretório**, se ele foi criado à mão:
 
   ```bash
