@@ -167,13 +167,15 @@ def prepara(perfis, ufs, gerado, areas=None, estat=None):
         d7, d30, d90 = sum(act[-8:-1]), sum(act[-31:-1]), sum(completos)
         semanas = [sum(completos[i * BUCKET_DIAS:(i + 1) * BUCKET_DIAS])
                    for i in range(BUCKETS)]
-        ano = None
+        ano = inicio = None
         if p.get("firstEditDate"):
-            ano = dt.datetime.utcfromtimestamp(p["firstEditDate"] / 1000).year
+            quando = dt.datetime.utcfromtimestamp(p["firstEditDate"] / 1000).date()
+            ano, inicio = quando.year, quando
         eds.append({
             "u": p["username"], "uf": ufs.get(p["username"]),
             "lvl": p.get("level"), "tot": p.get("edits") or 0,
-            "d7": d7, "d30": d30, "d90": d90,
+            "d7": d7, "d30": d30, "d90": d90, "d14": sum(act[-15:-1]),
+            "inicio": inicio,
             "streak": _streak(act), "tend": _tendencia(act),
             "semanas": semanas if d90 > 0 else None, "ano": ano,
             "mentees": p.get("menteesCount") or 0,
@@ -199,11 +201,13 @@ def prepara(perfis, ufs, gerado, areas=None, estat=None):
     hoje = dt.date.today()
     d0 = hoje - dt.timedelta(days=90)
     semana = [0] * 7
+    diario = [0] * JANELA
     for p in perfis:
         act = p.get("activity") or []
         for i, v in enumerate(act[:-1]):
-            if v:
+            if v and i < JANELA:
                 semana[(d0 + dt.timedelta(days=i)).weekday()] += v
+                diario[i] += v
 
     por90 = sorted(eds, key=lambda e: -e["d90"])
     tot90 = sum(e["d90"] for e in eds) or 1
@@ -273,6 +277,98 @@ def prepara(perfis, ufs, gerado, areas=None, estat=None):
     retencao = taxas[len(taxas) // 2] if taxas else 0
     faixa = [taxas[0], taxas[-1]] if taxas else [0, 0]
 
+    # --- nível x atividade -------------------------------------------------
+    porniv = defaultdict(lambda: [0, 0])
+    for e in eds:
+        if e["lvl"]:
+            porniv[e["lvl"]][0] += 1
+            if e["d90"] > 0:
+                porniv[e["lvl"]][1] += 1
+    niveis = [[lv, porniv[lv][0], porniv[lv][1]] for lv in sorted(porniv)]
+
+    # --- quem começou dentro da janela --------------------------------------
+    novatos = []
+    for e in eds:
+        if not e["inicio"] or e["inicio"] < d0:
+            continue
+        novatos.append([e["u"], e["uf"], e["inicio"].isoformat(), e["d90"],
+                        1 if e["d14"] > 0 else 0])
+    novatos.sort(key=lambda r: -r[3])
+    novatos_vivos = sum(1 for r in novatos if r[4])
+
+    # --- calendário de 91 dias, com os dias fora da curva --------------------
+    ordenado = sorted(diario)
+    mediana = ordenado[len(ordenado) // 2] if ordenado else 0
+    if len(diario) > 1:
+        m = sum(diario) / len(diario)
+        desvio = (sum((v - m) ** 2 for v in diario) / len(diario)) ** 0.5
+    else:
+        desvio = 0
+    calendario = []
+    for i, v in enumerate(diario):
+        fora = 0
+        if desvio:
+            if v > mediana + 2 * desvio:
+                fora = 1
+            elif v < mediana - 2 * desvio:
+                fora = -1
+        calendario.append([(d0 + dt.timedelta(days=i)).isoformat(), v, fora])
+
+    # --- mentoria ------------------------------------------------------------
+    apad = {}
+    for p in perfis:
+        for m in (p.get("mentees") or []):
+            if m.get("username"):
+                apad[m["username"]] = p["username"]
+    por_nome = {e["u"]: e for e in eds}
+    dentro = [u for u in apad if u in por_nome]
+    ativos_ap = sum(1 for u in dentro if por_nome[u]["d90"] > 0)
+    resto = [e for e in eds if e["u"] not in apad]
+    ativos_re = sum(1 for e in resto if e["d90"] > 0)
+    mentores = []
+    for p in perfis:
+        lista = [m for m in (p.get("mentees") or []) if m.get("username")]
+        if not lista:
+            continue
+        viv = sum(1 for m in lista
+                  if m["username"] in por_nome and por_nome[m["username"]]["d90"] > 0)
+        mentores.append([p["username"], ufs.get(p["username"]), len(lista), viv])
+    mentores.sort(key=lambda r: (-r[3], -r[2]))
+    mentoria = {
+        "mentores": len(mentores),
+        "afilhados": len(apad),
+        "rastreados": len(dentro),
+        "ativosApad": ativos_ap,
+        "pctApad": round(100 * ativos_ap / len(dentro)) if dentro else 0,
+        "pctResto": round(100 * ativos_re / len(resto)) if resto else 0,
+        "top": mentores[:8],
+    }
+
+    # --- áreas longe do próprio estado --------------------------------------
+    centros = {}
+    for u, pols in areas.items():
+        pts = [(x, y) for pol in pols for x, y in pol["coordinates"][0]
+               if MAPA_LON[0] <= x <= MAPA_LON[1] and MAPA_LAT[0] <= y <= MAPA_LAT[1]]
+        if pts:
+            centros[u] = (sum(q[0] for q in pts) / len(pts),
+                          sum(q[1] for q in pts) / len(pts))
+    porufc = defaultdict(list)
+    for u, c in centros.items():
+        if ufs.get(u):
+            porufc[ufs[u]].append((u, c))
+    forasteiros = []
+    for uf, gente in porufc.items():
+        if len(gente) < 3:
+            continue
+        xs = sorted(c[0] for _, c in gente)
+        ys = sorted(c[1] for _, c in gente)
+        mx, my = xs[len(xs) // 2], ys[len(ys) // 2]
+        for u, c in gente:
+            km = round((((c[0] - mx) ** 2 + (c[1] - my) ** 2) ** 0.5) * 111)
+            if km >= 500:
+                forasteiros.append([u, uf, km])
+    forasteiros.sort(key=lambda r: -r[2])
+
     ativos30 = len(abas["d30"])
     return {
         "gerado": gerado,
@@ -321,6 +417,15 @@ def prepara(perfis, ufs, gerado, areas=None, estat=None):
             "estados": estados,
             "evasao": evasao,
             "retornos": retornos,
+            "niveis": niveis,
+            "novatos": novatos[:10],
+            "novatosTotal": len(novatos),
+            "novatosVivos": novatos_vivos,
+            "calendario": calendario,
+            "calInicio": d0.weekday(),
+            "calMediana": mediana,
+            "mentoria": mentoria,
+            "forasteiros": forasteiros[:8],
             "mapa": _grade_cobertura(areas, ufs),
         },
     }
@@ -607,6 +712,49 @@ function link(u) {
      style="color:inherit">${esc(u)}</a>`;
 }
 
+function calendario(p) {
+  const dias = p.calendario;
+  if (!dias.length) return "";
+  const max = Math.max(...dias.map((d) => d[1])) || 1;
+  const SEM = Math.ceil((dias.length + p.calInicio) / 7);
+  const L = 13, G = 3;                      // lado da célula e respiro
+  const celulas = dias.map(([iso, v, fora], i) => {
+    const pos = i + p.calInicio;
+    const x = Math.floor(pos / 7) * (L + G), y = (pos % 7) * (L + G);
+    const o = v ? Math.max(0.12, v / max) : 0;
+    const anel = fora
+      ? `<rect x="${x - 1}" y="${y - 1}" width="${L + 2}" height="${L + 2}" rx="3"
+           fill="none" stroke="var(${fora > 0 ? "--up" : "--down"})" stroke-width="1.5"/>`
+      : "";
+    return `<rect x="${x}" y="${y}" width="${L}" height="${L}" rx="2.5"
+        fill="var(--series)" fill-opacity="${o.toFixed(3)}"
+        ><title>${iso}: ${NF.format(v)} edições${
+          fora > 0 ? " (acima da curva)" : fora < 0 ? " (abaixo da curva)" : ""
+        }</title></rect>${anel}`;
+  }).join("");
+  const rotulos = [0, 2, 4, 6].map((d) =>
+    `<text x="-6" y="${d * (L + G) + L - 3}" text-anchor="end" font-size="9"
+       fill="var(--axis)">${["seg","ter","qua","qui","sex","sáb","dom"][d]}</text>`).join("");
+  const destaque = dias.filter((d) => d[2]);
+
+  return `<div class="painel largo"><h2>Calendário — edições por dia no Brasil</h2>
+    <div style="overflow:visible">
+    <svg viewBox="-26 -4 ${SEM * (L + G) + 30} ${7 * (L + G) + 8}"
+         style="width:100%;max-width:640px;height:auto" role="img"
+         aria-label="Calendário de edições diárias nos últimos ${D.cfg.janela} dias">
+      ${rotulos}${celulas}
+    </svg></div>
+    <p style="color:var(--muted);font-size:.8rem;margin:10px 0 0">
+    Cada quadrado é um dia; a intensidade é o total de edições do país.
+    A mediana diária é <b>${NF.format(p.calMediana)}</b>.
+    ${destaque.length
+      ? `Contornados, os <b>${destaque.length}</b> dias que fogem dois desvios da
+         mediana — ${destaque.map((d) => d[0].slice(8, 10) + "/" + d[0].slice(5, 7)).join(", ")}.
+         Dias assim costumam ser mutirão de um lado e feriado ou pane do outro.`
+      : "Nenhum dia foge dois desvios da mediana no período."}
+    </p></div>`;
+}
+
 function mapa(m) {
   if (!m.celulas.length) return "";
   const FAIXAS = [[5, 1, "5 ou mais"], [3, .72, "3 a 4"],
@@ -732,6 +880,73 @@ function paineis() {
        return `O fim de semana rende <b>${d > 0 ? "+" : ""}${d}%</b> em relação ao dia
                útil médio.`; })()}</p></div>`);
 
+  blocos.push(`<div class="painel"><h2>Nível e atividade</h2>
+    ${p.niveis.map(([lv, n, viv]) => {
+      const max = Math.max(...p.niveis.map((r) => r[1])) || 1;
+      return `<div class="barra">
+        <span>N${lv}</span>
+        <span class="t"><span class="f" style="width:${Math.max(1,(n/max)*100)}%;display:block"></span></span>
+        <span class="v" title="${viv} de ${n} editaram nos últimos ${D.cfg.janela} dias"
+          >${NF.format(n)} <span style="opacity:.8">· ${Math.round(100*viv/n)}%</span></span>
+      </div>`;
+    }).join("")}
+    <p style="color:var(--muted);font-size:.8rem;margin:10px 0 0">
+    Barra é quantos editores há em cada nível; o percentual é quanto deles
+    editou nos últimos ${D.cfg.janela} dias.</p></div>`);
+
+  blocos.push(`<div class="painel"><h2>Chegaram na janela</h2>
+    ${p.novatos.length ? `<table><thead><tr><th>Editor</th>
+    <th class="num">Desde</th><th class="num">${D.cfg.janela} d</th>
+    </tr></thead><tbody>
+    ${p.novatos.map(([u, uf, desde, ed, vivo]) => `<tr>
+      <td>${link(u)} <span class="chip">${uf || "--"}</span>${
+        vivo ? "" : ' <span class="chip">parou</span>'}</td>
+      <td class="num">${desde.slice(8,10)}/${desde.slice(5,7)}</td>
+      <td class="num">${NF.format(ed)}</td></tr>`).join("")}
+    </tbody></table>` : `<p style="color:var(--muted)">Ninguém estreou na janela.</p>`}
+    <p style="color:var(--muted);font-size:.8rem;margin:10px 0 0">
+    <b>${NF.format(p.novatosTotal)}</b> fizeram a primeira edição da vida dentro
+    da janela; <b>${NF.format(p.novatosVivos)}</b> ainda editaram nas duas
+    últimas semanas.</p></div>`);
+
+  const mt = p.mentoria;
+  blocos.push(`<div class="painel"><h2>Mentoria</h2>
+    ${mt.rastreados ? `<div class="barra"><span>apadr.</span>
+       <span class="t"><span class="f" style="width:${mt.pctApad}%;display:block"></span></span>
+       <span class="v">${mt.pctApad}%</span></div>
+     <div class="barra"><span>demais</span>
+       <span class="t"><span class="f" style="width:${mt.pctResto}%;display:block"></span></span>
+       <span class="v">${mt.pctResto}%</span></div>
+     <p style="color:var(--muted);font-size:.8rem;margin:8px 0 12px">
+     Fatia que editou nos últimos ${D.cfg.janela} dias, entre os
+     ${NF.format(mt.rastreados)} apadrinhados que estão no placar e entre os
+     demais editores.</p>
+     <table><thead><tr><th>Mentor</th><th class="num">Afilh.</th>
+     <th class="num">Ativos</th></tr></thead><tbody>
+     ${mt.top.map(([u, uf, n, viv]) => `<tr>
+        <td>${link(u)} <span class="chip">${uf || "--"}</span></td>
+        <td class="num">${n}</td><td class="num">${viv}</td></tr>`).join("")}
+     </tbody></table>`
+     : `<p style="color:var(--muted)">Sem dados de afilhados nesta coleta.</p>`}
+    <p style="color:var(--muted);font-size:.8rem;margin:10px 0 0">
+    ${NF.format(mt.mentores)} editores aparecem como mentores, com
+    ${NF.format(mt.afilhados)} afilhados nomeados.</p></div>`);
+
+  if (p.forasteiros.length) {
+    blocos.push(`<div class="painel"><h2>Cuidam de longe</h2>
+      <table><thead><tr><th>Editor</th><th class="num">Distância</th>
+      </tr></thead><tbody>
+      ${p.forasteiros.map(([u, uf, km]) => `<tr>
+        <td>${link(u)} <span class="chip">${uf}</span></td>
+        <td class="num">${NF.format(km)} km</td></tr>`).join("")}
+      </tbody></table>
+      <p style="color:var(--muted);font-size:.8rem;margin:10px 0 0">
+      Distância entre o centro das áreas que a pessoa gerencia dentro do Brasil
+      e o centro das áreas dos demais editores do mesmo estado. Áreas fora do
+      país não entram na conta.</p></div>`);
+  }
+
+  blocos.push(calendario(p));
   blocos.push(mapa(p.mapa));
 
   $("paineis").innerHTML = blocos.join("");

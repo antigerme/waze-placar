@@ -325,6 +325,15 @@ def normaliza_perfil(username: str, d: dict) -> dict:
         "firstEditDate": d.get("firstEditDate"),
         "isMentor": bool(d.get("isMentor")),
         "menteesCount": d.get("menteesCount") or 0,
+        # A lista, e não só a contagem: é o que permite perguntar se apadrinhar
+        # muda alguma coisa, cruzando cada afilhado com a atividade dele.
+        "mentees": [
+            {"userId": m.get("userId"), "username": m.get("userName"),
+             "level": (m["rank"] + 1) if isinstance(m.get("rank"), int) else None,
+             "edits": m.get("edits") or 0,
+             "desde": m.get("menteeStartDate")}
+            for m in (d.get("mentees") or []) if m.get("userName")
+        ],
         "editsByType": tipos,
         # índice 0 = 90 dias atrás, último = hoje (parcial)
         "activity": d.get("editingActivity") or [],
