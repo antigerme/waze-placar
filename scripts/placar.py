@@ -1,432 +1,33 @@
 #!/usr/bin/env python3
 """Gera o placar dos editores de mapa do Waze no Brasil.
 
-Sem banco, sem estado: lê tudo ao vivo da API do Waze e escreve um HTML
-autocontido. As três janelas que a API oferece (histórico, mês, semana) viram
-as três abas do placar.
+Sem banco, sem estado. Duas coletas ao vivo:
 
-Cada janela é varrida em 28 rankings — o nacional e os 27 estaduais — porque
-cada ranking devolve no máximo 500 linhas. Os rankings estaduais são
-mutuamente exclusivos, então a UF de cada editor sai de graça da varredura.
+  1. os 28 rankings (nacional + 27 UFs) dizem quem são os editores e de onde;
+  2. o perfil de cada um traz os últimos 91 dias de edições diárias.
+
+A página resultante ordena por atividade recente, e não pelo acumulado desde
+2011 — o acumulado premia quem já parou.
 
 Uso:
-    python3 scripts/placar.py                    # gera placar.html
-    python3 scripts/placar.py --print            # tabela no terminal
-    python3 scripts/placar.py --json dados.json  # dados crus
+    python3 scripts/placar.py --out /var/www/waze-placar/index.html
+    python3 scripts/placar.py --sem-perfis        # rápido, só o acumulado
+    python3 scripts/placar.py --perfis perfis.jsonl   # reaproveita uma coleta
 """
 
 import argparse
 import datetime as dt
-import gzip
-import html
-import http.cookiejar
 import json
 import os
-import random
 import sys
-import threading
 import time
-import urllib.error
-import urllib.parse
-import urllib.request
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-# Anotações via typing, e não list[...]/X | Y, para rodar no Python 3.6 que vem
-# de fábrica no RHEL 8 — lá /usr/bin/python3 ainda é o 3.6.
-from typing import Dict, List, Optional, Tuple
 
-API = "https://www.waze.com/_user/api/leaderboard"
-UA = (
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
-)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import pagina  # noqa: E402
+import waze  # noqa: E402
+
 ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_COOKIES = "/tmp/cookies.txt"
-
-# As únicas três que o servidor honra. Qualquer outro valor volta como
-# ALL_TIME com status 200, sem erro — por isso o enum é fixo aqui.
-PERIODS = {
-    "ALL_TIME": "Histórico",
-    "PAST_MONTH": "Mês",
-    "PAST_WEEK": "Semana",
-}
-
-UFS = [
-    "AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS",
-    "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC",
-    "SE", "SP", "TO",
-]
-
-WORKERS = 4
-DELAY = 0.35
-
-_throttle = threading.Lock()
-_last_call = [0.0]
-
-
-# --------------------------------------------------------------------------- rede
-
-def _unlink(path: Path) -> None:
-    """Path.unlink(missing_ok=...) só chegou no 3.8."""
-    try:
-        path.unlink()
-    except FileNotFoundError:
-        pass
-
-
-def load_opener(cookie_path: str) -> urllib.request.OpenerDirector:
-    """Abre a sessão a partir de um arquivo de cookies no formato Netscape."""
-    path = Path(cookie_path)
-    if not path.exists():
-        sys.exit(f"{cookie_path}: arquivo de cookies não encontrado.")
-
-    jar = http.cookiejar.MozillaCookieJar()
-    # MozillaCookieJar ignora as linhas "#HttpOnly_" que o curl escreve.
-    cleaned = "\n".join(
-        line[len("#HttpOnly_"):] if line.startswith("#HttpOnly_") else line
-        for line in path.read_text(encoding="utf-8", errors="replace").splitlines()
-    )
-    tmp = Path(os.environ.get("TMPDIR", "/tmp")) / f".waze-cookies-{os.getpid()}"
-    try:
-        tmp.write_text(cleaned + "\n", encoding="utf-8")
-        os.chmod(tmp, 0o600)
-        jar.load(str(tmp), ignore_discard=True, ignore_expires=True)
-    finally:
-        _unlink(tmp)
-
-    if not any(c.name == "_web_session" for c in jar):
-        sys.exit(
-            f"{cookie_path}: não achei o cookie _web_session de www.waze.com. "
-            "Exporte os cookies com a sessão do waze.com aberta."
-        )
-    return urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
-
-
-def fetch(opener, params: dict, attempts: int = 4) -> Optional[dict]:
-    """Um GET, com throttle e backoff exponencial. None = desistiu."""
-    url = f"{API}?{urllib.parse.urlencode(params)}"
-    for attempt in range(attempts):
-        with _throttle:
-            gap = time.monotonic() - _last_call[0]
-            if gap < DELAY:
-                time.sleep(DELAY - gap)
-            _last_call[0] = time.monotonic()
-
-        req = urllib.request.Request(
-            url,
-            headers={
-                "User-Agent": UA,
-                "Accept": "application/json",
-                "Accept-Encoding": "gzip",
-                "Referer": "https://www.waze.com/leaderboard",
-            },
-        )
-        try:
-            with opener.open(req, timeout=30) as resp:
-                raw = resp.read()
-                if resp.headers.get("Content-Encoding") == "gzip":
-                    raw = gzip.decompress(raw)
-                return json.loads(raw)
-        except urllib.error.HTTPError as exc:
-            if exc.code in (401, 403):
-                sys.exit(f"HTTP {exc.code} — sessão expirada. Atualize os cookies.")
-            if attempt == attempts - 1:
-                print(f"  ! desisti de {params}: {exc}", file=sys.stderr)
-                return None
-            time.sleep((2 ** attempt) + random.random())
-        # OSError cobre URLError, socket.timeout e queda de conexão. No 3.6
-        # socket.timeout ainda não é TimeoutError, então pegar OSError é o que
-        # funciona em todas as versões.
-        except (OSError, json.JSONDecodeError) as exc:
-            if attempt == attempts - 1:
-                print(f"  ! desisti de {params}: {exc}", file=sys.stderr)
-                return None
-            time.sleep((2 ** attempt) + random.random())
-    return None
-
-
-# ------------------------------------------------------------------------ coleta
-
-def collect(opener, period: str,
-            quiet: bool = False) -> Tuple[List[dict], List[str]]:
-    """Varre o ranking nacional e os 27 estaduais.
-
-    Devolve os editores e a lista dos rankings que não responderam — publicar
-    uma varredura incompleta por cima de uma boa seria pior que não publicar.
-    """
-    boards = [None] + UFS  # None = nacional
-    editors: Dict[str, dict] = {}
-    failed: List[str] = []
-    lock = threading.Lock()
-    done = [0]
-
-    def work(uf: Optional[str]) -> None:
-        params = {
-            "lookbackPeriod": period,
-            "countryCode": "BR",
-            "show_editor_levels": "true",
-        }
-        if uf:
-            params["stateCode"] = f"BR-{uf}"
-        data = fetch(opener, params)
-        if data is None:
-            with lock:
-                failed.append(f"{period}/{uf or 'BR'}")
-                done[0] += 1
-            return
-        rows = data.get("record") or []
-
-        with lock:
-            for raw in rows:
-                uid = raw.get("userId")
-                edits = int(raw.get("mapEditCount") or 0)
-                # No modo período, mapEditCount são as edições da janela; zero
-                # significa que a pessoa pontuou dirigindo, não editando.
-                if not uid or edits <= 0:
-                    continue
-                cur = editors.setdefault(
-                    uid,
-                    {
-                        "userId": uid,
-                        "username": raw.get("username") or "?",
-                        # `level` some do registro de quem nunca editou.
-                        "level": int(raw["level"]) if raw.get("level") else None,
-                        "edits": edits,
-                        "points": int(raw.get("points") or 0),
-                        "uf": None,
-                    },
-                )
-                cur["edits"] = max(cur["edits"], edits)
-                cur["points"] = max(cur["points"], int(raw.get("points") or 0))
-                if uf:
-                    cur["uf"] = uf
-            done[0] += 1
-            if not quiet:
-                print(
-                    f"  [{done[0]:2d}/{len(boards)}] {period:<10} "
-                    f"{uf or 'BR':<3} linhas={len(rows):3d} editores={len(editors)}",
-                    file=sys.stderr,
-                )
-
-    with ThreadPoolExecutor(max_workers=WORKERS) as pool:
-        list(pool.map(work, boards))
-
-    ranked = sorted(editors.values(), key=lambda r: -r["edits"])
-    for i, row in enumerate(ranked, 1):
-        row["rank"] = i
-    return ranked, failed
-
-
-# ------------------------------------------------------------------------- saída
-
-def print_table(rows: List[dict], period: str, top: int) -> None:
-    print(f"\n{PERIODS[period]} — {len(rows)} editores")
-    print(f"{'#':>4}  {'edições':>9}  {'nv':>2}  {'UF':<2}  editor")
-    for r in rows[:top]:
-        lvl = r["level"] if r["level"] is not None else "-"
-        print(f"{r['rank']:>4}  {r['edits']:>9}  {lvl:>2}  {r['uf'] or '--':<2}  "
-              f"{r['username']}")
-
-
-PAGE = """<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Placar dos Editores do Waze — Brasil</title>
-<style>
-  :root {
-    --bg:#f6f8fa; --card:#fff; --ink:#12212e; --muted:#5b6b7a; --line:#e3e9ef;
-    --accent:#0b7fd4; --bar:#cfe8fa; --chip:#eef3f7;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg:#0d1519; --card:#141f26; --ink:#e6eef4; --muted:#8ba3b4;
-            --line:#22323d; --accent:#3ec6f5; --bar:#1b3f55; --chip:#1b2a33; }
-  }
-  :root[data-theme="light"] {
-    --bg:#f6f8fa; --card:#fff; --ink:#12212e; --muted:#5b6b7a; --line:#e3e9ef;
-    --accent:#0b7fd4; --bar:#cfe8fa; --chip:#eef3f7;
-  }
-  :root[data-theme="dark"] {
-    --bg:#0d1519; --card:#141f26; --ink:#e6eef4; --muted:#8ba3b4;
-    --line:#22323d; --accent:#3ec6f5; --bar:#1b3f55; --chip:#1b2a33;
-  }
-  * { box-sizing:border-box }
-  body { margin:0; background:var(--bg); color:var(--ink);
-         font:15px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif }
-  .wrap { max-width:1000px; margin:0 auto; padding:28px 18px 64px }
-  h1 { font-size:1.6rem; margin:0 0 4px; letter-spacing:-.02em }
-  .sub { color:var(--muted); font-size:.9rem; margin:0 0 22px }
-  .tabs { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px }
-  .tab { border:1px solid var(--line); background:var(--card); color:var(--muted);
-         padding:8px 16px; border-radius:999px; cursor:pointer; font-size:.9rem;
-         font-weight:600 }
-  .tab[aria-selected="true"] { background:var(--accent); border-color:var(--accent);
-                               color:#fff }
-  .stats { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px }
-  .stat { background:var(--card); border:1px solid var(--line); border-radius:10px;
-          padding:10px 14px; min-width:120px }
-  .stat b { display:block; font-size:1.25rem; letter-spacing:-.02em }
-  .stat span { color:var(--muted); font-size:.75rem; text-transform:uppercase;
-               letter-spacing:.05em }
-  .controls { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px }
-  input, select { background:var(--card); border:1px solid var(--line);
-                  color:var(--ink); border-radius:8px; padding:8px 12px;
-                  font-size:.9rem; font-family:inherit }
-  input { flex:1; min-width:180px }
-  .tablewrap { background:var(--card); border:1px solid var(--line);
-               border-radius:12px; overflow-x:auto }
-  table { border-collapse:collapse; width:100%; font-variant-numeric:tabular-nums }
-  th, td { padding:9px 12px; text-align:left; border-bottom:1px solid var(--line);
-           white-space:nowrap }
-  th { font-size:.72rem; text-transform:uppercase; letter-spacing:.06em;
-       color:var(--muted); font-weight:600; position:sticky; top:0;
-       background:var(--card) }
-  tr:last-child td { border-bottom:none }
-  td.num, th.num { text-align:right }
-  .pos { color:var(--muted); width:56px }
-  .medal { font-size:1rem }
-  .name { font-weight:600; width:99%; white-space:normal }
-  .name a { color:inherit; text-decoration:none }
-  .name a:hover, .name a:focus-visible { color:var(--accent);
-                                         text-decoration:underline }
-  .chip { background:var(--chip); border-radius:5px; padding:1px 7px;
-          font-size:.75rem; color:var(--muted); font-weight:600 }
-  .barcell { width:120px; min-width:120px; padding-left:0 }
-  .bar { height:6px; border-radius:3px; background:var(--bar); min-width:2px }
-  .empty { padding:28px; text-align:center; color:var(--muted) }
-  footer { margin-top:22px; color:var(--muted); font-size:.8rem }
-  footer p { margin:.45em 0 }
-  code { background:var(--chip); padding:1px 5px; border-radius:4px; font-size:.9em }
-</style>
-
-<div class="wrap">
-  <h1>Placar dos Editores do Waze</h1>
-  <p class="sub">Brasil &middot; gerado em __STAMP__ a partir da API pública do Waze</p>
-
-  <div class="tabs" id="tabs"></div>
-  <div class="stats" id="stats"></div>
-
-  <div class="controls">
-    <input id="q" type="search" placeholder="Procurar editor…" autocomplete="off">
-    <select id="uf"></select>
-  </div>
-
-  <div class="tablewrap">
-    <table>
-      <thead><tr>
-        <th class="pos">#</th><th>Editor</th><th>UF</th><th>Nível</th>
-        <th class="num">Edições</th><th class="barcell"></th>
-        <th class="num">Pontos</th>
-      </tr></thead>
-      <tbody id="body"></tbody>
-    </table>
-    <div class="empty" id="empty" hidden>Nenhum editor encontrado.</div>
-  </div>
-
-  <footer>
-    <p><b>Como é montado.</b> Cada janela é varrida em 28 rankings — o nacional e
-    os 27 estaduais. A API entrega no máximo 500 linhas por ranking, então a
-    varredura estadual é o que amplia a cobertura. Como os rankings estaduais não
-    se sobrepõem, a UF de cada editor vem da varredura.</p>
-    <p><b>O que fica de fora.</b> Os rankings do Waze ordenam por pontos —
-    dirigir e editar somados — e não por edições. Em janelas curtas as 500 vagas
-    enchem de motorista, então <i>Semana</i> e <i>Mês</i> mostram bem menos gente
-    que <i>Histórico</i>. Quem editou pouco no período pode não aparecer.</p>
-    <p>Clique no nome para abrir o perfil do editor no Waze. Dados de
-    <code>www.waze.com/_user/api/leaderboard</code>. Página estática, sem
-    servidor e sem banco.</p>
-  </footer>
-</div>
-
-<script>
-const DATA = __DATA__;
-const NF = new Intl.NumberFormat("pt-BR");
-const MEDALS = ["\\u{1F947}", "\\u{1F948}", "\\u{1F949}"];
-let period = Object.keys(DATA.periods)[0];
-
-const $ = (id) => document.getElementById(id);
-
-// Os nomes vêm de terceiros e entram via innerHTML — escapar não é opcional.
-const ESC = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
-const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ESC[c]);
-const profile = (u) => "https://www.waze.com/user/editor/" + encodeURIComponent(u);
-
-function rows() {
-  const q = $("q").value.trim().toLowerCase();
-  const uf = $("uf").value;
-  return DATA.periods[period].rows.filter(
-    (r) => (!uf || r[4] === uf) && (!q || r[1].toLowerCase().includes(q))
-  );
-}
-
-function render() {
-  const list = rows();
-  const max = list.length ? Math.max(...list.map((r) => r[2])) : 1;
-  $("body").innerHTML = list
-    .map((r) => {
-      const [pos, name, edits, points, uf, level] = r;
-      const medal = pos <= 3 ? `<span class="medal">${MEDALS[pos - 1]}</span> ` : "";
-      const pct = Math.max(2, Math.round((edits / max) * 100));
-      return `<tr>
-        <td class="pos">${medal}${pos}</td>
-        <td class="name"><a href="${esc(profile(name))}" target="_blank"
-           rel="noopener noreferrer" title="Ver perfil de ${esc(name)} no Waze"
-           >${esc(name)}</a></td>
-        <td><span class="chip">${uf || "--"}</span></td>
-        <td>${level ? `<span class="chip">N${level}</span>` : ""}</td>
-        <td class="num">${NF.format(edits)}</td>
-        <td class="barcell"><div class="bar" style="width:${pct}%"></div></td>
-        <td class="num">${NF.format(points)}</td>
-      </tr>`;
-    })
-    .join("");
-  $("empty").hidden = list.length > 0;
-
-  const total = list.reduce((a, r) => a + r[2], 0);
-  const ufs = new Set(list.map((r) => r[4]).filter(Boolean));
-  $("stats").innerHTML = [
-    [NF.format(list.length), "editores"],
-    [NF.format(total), "edições na janela"],
-    [ufs.size, "estados"],
-  ]
-    .map(([v, k]) => `<div class="stat"><b>${v}</b><span>${k}</span></div>`)
-    .join("");
-}
-
-function build() {
-  $("tabs").innerHTML = Object.entries(DATA.periods)
-    .map(
-      ([k, v]) =>
-        `<button class="tab" role="tab" data-k="${k}" aria-selected="${k === period}">
-           ${v.label} <span style="opacity:.65">${NF.format(v.rows.length)}</span>
-         </button>`
-    )
-    .join("");
-  $("tabs").onclick = (e) => {
-    const b = e.target.closest(".tab");
-    if (!b) return;
-    period = b.dataset.k;
-    [...$("tabs").children].forEach((t) =>
-      t.setAttribute("aria-selected", t.dataset.k === period)
-    );
-    fillUfs();
-    render();
-  };
-  fillUfs();
-  $("q").oninput = render;
-  $("uf").onchange = render;
-  render();
-}
-
-function fillUfs() {
-  const keep = $("uf").value;
-  const ufs = [...new Set(DATA.periods[period].rows.map((r) => r[4]).filter(Boolean))].sort();
-  $("uf").innerHTML =
-    `<option value="">Todos os estados</option>` +
-    ufs.map((u) => `<option${u === keep ? " selected" : ""}>${u}</option>`).join("");
-}
-
-build();
-</script>
-"""
 
 
 def write_atomic(path: Path, text: str) -> None:
@@ -437,112 +38,118 @@ def write_atomic(path: Path, text: str) -> None:
     servi-lo. O chmod é explícito porque a umask do cron pode ser restritiva.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(f".{path.name}.tmp")
+    tmp = path.with_name("." + path.name + ".tmp")
     try:
         tmp.write_text(text, encoding="utf-8")
         os.chmod(tmp, 0o644)
         os.replace(tmp, path)
     except BaseException:
-        _unlink(tmp)
+        waze._unlink(tmp)
         raise
-
-
-def build_html(collected: Dict[str, List[dict]], stamp: str) -> str:
-    payload = {
-        "periods": {
-            period: {
-                "label": PERIODS[period],
-                # Compacto de propósito: posição, nome, edições, pontos, UF, nível.
-                "rows": [
-                    [r["rank"], r["username"], r["edits"], r["points"],
-                     r["uf"], r["level"]]
-                    for r in rows
-                ],
-            }
-            for period, rows in collected.items()
-        }
-    }
-    data = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
-    # `</script>` dentro do JSON encerraria o bloco cedo demais.
-    data = data.replace("</", "<\\/")
-    return PAGE.replace("__DATA__", data).replace("__STAMP__", html.escape(stamp))
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
-    )
-    ap.add_argument(
-        "--cookies",
-        default=os.environ.get("WAZE_COOKIES", DEFAULT_COOKIES),
-        help=f"arquivo de cookies Netscape (padrão: {DEFAULT_COOKIES})",
-    )
-    ap.add_argument(
-        "--period",
-        choices=list(PERIODS),
-        action="append",
-        help="limita as janelas coletadas (repetível; padrão: todas)",
-    )
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--cookies", default=os.environ.get(
+        "WAZE_COOKIES", waze.DEFAULT_COOKIES),
+        help="arquivo de cookies Netscape (padrão: {})".format(waze.DEFAULT_COOKIES))
     ap.add_argument("--out", default=str(ROOT / "placar.html"), help="HTML de saída")
-    ap.add_argument("--json", dest="json_out", help="grava também os dados crus")
-    ap.add_argument(
-        "--allow-partial",
-        action="store_true",
-        help="publica mesmo se algum ranking falhar (padrão: aborta sem escrever)",
-    )
-    ap.add_argument("--print", action="store_true", help="tabela no terminal")
-    ap.add_argument("--top", type=int, default=25, help="linhas com --print")
-    ap.add_argument("--quiet", action="store_true", help="sem progresso")
+    ap.add_argument("--perfis", help="JSONL de perfis já coletados, em vez de buscar")
+    ap.add_argument("--sem-perfis", action="store_true", dest="sem_perfis",
+                    help="pula os perfis; a página sai só com o acumulado")
+    ap.add_argument("--salvar-perfis", dest="salvar",
+                    help="grava os perfis coletados neste JSONL")
+    ap.add_argument("--limit", type=int, help="usa só os N maiores (para teste)")
+    ap.add_argument("--allow-partial", action="store_true",
+                    help="publica mesmo se algum ranking falhar")
+    ap.add_argument("--quiet", action="store_true")
     args = ap.parse_args()
 
-    opener = load_opener(args.cookies)
-    periods = args.period or list(PERIODS)
+    inicio = time.time()
+    opener = waze.load_opener(args.cookies)
 
-    collected: Dict[str, List[dict]] = {}
-    failures: List[str] = []
-    for period in periods:
-        collected[period], failed = collect(opener, period, quiet=args.quiet)
-        failures += failed
-
-    if failures and not args.allow_partial:
+    if not args.quiet:
+        print("varrendo os 28 rankings…", file=sys.stderr)
+    try:
+        editores, falhas = waze.coleta_placar(opener, "ALL_TIME", quiet=args.quiet)
+    except waze.SemPermissao as exc:
+        sys.exit("{} — sessão expirada. Atualize {}.".format(exc, args.cookies))
+    if falhas and not args.allow_partial:
         sys.exit(
-            f"{len(failures)} ranking(s) não responderam: {', '.join(failures)}\n"
-            "Nada foi publicado — a página anterior continua no lugar. "
-            "Use --allow-partial para publicar mesmo assim."
-        )
+            "{} ranking(s) não responderam: {}\nNada foi publicado — a página "
+            "anterior continua no lugar. Use --allow-partial para publicar mesmo "
+            "assim.".format(len(falhas), ", ".join(falhas)))
+    if args.limit:
+        editores = editores[:args.limit]
 
-    if args.print:
-        for period in periods:
-            print_table(collected[period], period, args.top)
-        return
+    ufs = {e["username"]: e["uf"] for e in editores}
 
-    now = dt.datetime.now().astimezone()
-    stamp = now.strftime("%d/%m/%Y %H:%M %Z").strip()
+    if args.perfis:
+        perfis = [json.loads(l) for l in Path(args.perfis).open(encoding="utf-8")]
+        perfis = [p for p in perfis if p["username"] in ufs]
+        if not args.quiet:
+            print("{} perfis lidos de {}".format(len(perfis), args.perfis),
+                  file=sys.stderr)
+    elif args.sem_perfis:
+        # Sem atividade diária: a página mostra só o acumulado.
+        perfis = [{"username": e["username"], "level": e["level"],
+                   "edits": e["edits"], "activity": [], "firstEditDate": None,
+                   "menteesCount": 0} for e in editores]
+    else:
+        if not args.quiet:
+            print("buscando {} perfis (~{:.0f} min)…".format(
+                len(editores),
+                len(editores) * ((waze.GAP_MIN + waze.GAP_MAX) / 2) / 60),
+                file=sys.stderr)
+        salvar = Path(args.salvar).open("w", encoding="utf-8") if args.salvar else None
+
+        def grava(p):
+            if salvar:
+                salvar.write(json.dumps(p, ensure_ascii=False) + "\n")
+                salvar.flush()
+
+        try:
+            perfis, barrado = waze.coleta_perfis(
+                opener, [e["username"] for e in editores],
+                quiet=args.quiet, on_result=grava)
+        finally:
+            if salvar:
+                salvar.close()
+
+        # O Descartes expira antes do /_user/api: dá para varrer os rankings e
+        # ainda assim não conseguir um perfil. Publicar assim trocaria a página
+        # de ontem por uma sem as abas de atividade, que é o conteúdo principal.
+        if barrado and len(perfis) < len(editores) * 0.9:
+            sys.exit(
+                "só {} de {} perfis coletados antes do Descartes recusar a "
+                "sessão.\nNada foi publicado — a página anterior continua no "
+                "lugar. Atualize {} (o backend de perfis expira antes do de "
+                "rankings) ou rode com --sem-perfis.".format(
+                    len(perfis), len(editores), args.cookies))
+
+    # Quem não teve perfil coletado ainda entra na página, só sem atividade.
+    vistos = {p["username"] for p in perfis}
+    for e in editores:
+        if e["username"] not in vistos:
+            perfis.append({"username": e["username"], "level": e["level"],
+                           "edits": e["edits"], "activity": [],
+                           "firstEditDate": None, "menteesCount": 0})
+
+    agora = dt.datetime.now().astimezone()
+    dados = pagina.prepara(perfis, ufs, agora.strftime("%d/%m/%Y %H:%M %Z").strip())
 
     out = Path(args.out)
-    write_atomic(out, build_html(collected, stamp))
-    size = out.stat().st_size / 1024
+    write_atomic(out, pagina.build_html(dados))
 
-    if args.json_out:
-        Path(args.json_out).write_text(
-            json.dumps(
-                {"gerado_em": now.isoformat(timespec="seconds"), "periodos": collected},
-                ensure_ascii=False,
-                indent=2,
-            )
-            + "\n",
-            encoding="utf-8",
-        )
-
-    print(f"\n{out}  ({size:.0f} KB)", file=sys.stderr)
-    for period in periods:
-        rows = collected[period]
-        edits = sum(r["edits"] for r in rows)
-        print(
-            f"  {PERIODS[period]:<10} {len(rows):5d} editores  "
-            f"{edits:>12,} edições".replace(",", "."),
-            file=sys.stderr,
-        )
+    r = dados["resumo"]
+    print("\n{}  ({:.0f} KB, {:.0f} min)".format(
+        out, out.stat().st_size / 1024, (time.time() - inicio) / 60),
+        file=sys.stderr)
+    print("  {} editores no histórico, {} ativos em 90 d, {} em 30 d".format(
+        r["historico"], r["ativos90"], r["ativos30"]), file=sys.stderr)
+    print("  {:,} edições em 90 dias, {}% concentradas em 50 pessoas".format(
+        r["edicoes90"], r["top50"]).replace(",", "."), file=sys.stderr)
 
 
 if __name__ == "__main__":
