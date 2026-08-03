@@ -6,9 +6,21 @@ import html
 import json
 from collections import Counter, defaultdict
 
+import waze
+
 DIAS = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"]
 BUCKETS = 15          # 15 baldes de 6 dias = os 90 dias completos
 BUCKET_DIAS = 6
+
+# Os textos da página derivam destes valores. Nada de número escrito à mão na
+# prosa: se um limiar mudar aqui, a explicação muda junto.
+JANELA = 90           # dias fechados do vetor de atividade
+META_DIAS = 45        # metade da janela, base da tendência
+EVASAO_DIAS = 21      # silêncio que liga o alerta
+EVASAO_MIN = 300      # produção mínima na 1ª metade para entrar na vigília
+TOP_PARADOS = 60      # recorte do histórico para os "gigantes parados"
+SAFRA_MIN = 10        # tamanho mínimo de safra para a taxa significar algo
+CAP_RANKING = 500     # teto de linhas por ranking, imposto pela API
 
 
 def _streak(act):
@@ -28,7 +40,7 @@ def _tendencia(act):
     Só devolve número quando há volume suficiente para a razão significar
     alguma coisa — senão 3 edições contra 1 viram '+200%'.
     """
-    a, b = sum(act[:45]), sum(act[45:90])
+    a, b = sum(act[:META_DIAS]), sum(act[META_DIAS:JANELA])
     if a + b < 200:
         return None
     if a == 0:
@@ -42,7 +54,9 @@ TIPOS = {
     "houseNumber": "numeração", "machineMapProblem": "MP auto",
     "schedule": "horários",
 }
-TIPO_COMUM = "segmentos"      # 4 em 5 editores; fica esmaecido para não poluir
+# Qual especialidade é a maioria muda conforme a aba: entre os ativos são
+# segmentos, entre os 2.200 do histórico são locais. Esmaecer a errada
+# destacaria justamente o comum, então isto é calculado por aba.
 
 
 def _especialidade(tipos):
@@ -164,7 +178,7 @@ def prepara(perfis, ufs, gerado, areas=None):
             "esp": _especialidade(p.get("editsByType")),
             "ritmo": _ritmo(act, d90),
             "silencio": _silencio(act),
-            "prim45": sum(act[:45]), "seg45": sum(act[45:90]),
+            "prim45": sum(act[:META_DIAS]), "seg45": sum(act[META_DIAS:JANELA]),
             "areas": len(areas.get(p["username"]) or []),
         })
 
@@ -205,7 +219,8 @@ def prepara(perfis, ufs, gerado, areas=None):
 
     por_total = sorted(eds, key=lambda e: -e["tot"])
     parados = [[e["u"], e["uf"], e["tot"], e["d90"], i + 1, e["silencio"]]
-               for i, e in enumerate(por_total[:60]) if e["d90"] < 100][:12]
+               for i, e in enumerate(por_total[:TOP_PARADOS])
+               if e["d90"] < 100][:12]
 
     # Fator de ônibus: quantos editores precisam sair para o estado perder
     # metade das edições. Um estado com fator 1 está a uma desistência de parar.
@@ -231,10 +246,25 @@ def prepara(perfis, ufs, gerado, areas=None):
     # Vigília: produzia no começo da janela e emudeceu no fim.
     evasao = sorted(
         ([e["u"], e["uf"], e["prim45"], e["silencio"]] for e in eds
-         if e["prim45"] >= 300 and e["silencio"] is not None
-         and e["silencio"] >= 21),
+         if e["prim45"] >= EVASAO_MIN and e["silencio"] is not None
+         and e["silencio"] >= EVASAO_DIAS),
         key=lambda r: -r[2])[:10]
     retornos = sum(1 for e in eds if e["prim45"] < 50 and e["seg45"] >= 500)
+
+    # Especialidade mais comum de cada aba, para esmaecer só o que é rotina ali.
+    tipo_comum = {}
+    for nome, indices in abas.items():
+        c = Counter(eds[i]["esp"] for i in indices if eds[i]["esp"])
+        tipo_comum[nome] = c.most_common(1)[0][0] if c else None
+
+    # Ritmo semanal: em vez de afirmar que é plano, mede.
+    util = sum(semana[:5]) / 5 if sum(semana) else 0
+    fds = sum(semana[5:]) / 2 if sum(semana) else 0
+    delta_fds = round(100 * (fds / util - 1)) if util else 0
+
+    # Retenção típica das safras com gente suficiente para a razão significar algo.
+    taxas = sorted(round(100 * viv / n) for _, n, viv in entrada if n >= SAFRA_MIN)
+    retencao = taxas[len(taxas) // 2] if taxas else 0
 
     ativos30 = len(abas["d30"])
     return {
@@ -245,13 +275,30 @@ def prepara(perfis, ufs, gerado, areas=None):
                       e["mentees"], e["esp"], e["ritmo"], e["areas"]]
                      for e in eds],
         "abas": abas,
-        "tipoComum": TIPO_COMUM,
+        "tipoComum": tipo_comum,
+        "cfg": {
+            "rankings": (len(waze.UFS) + 1) * len(waze.PERIODS),
+            "ufs": len(waze.UFS),
+            "cap": CAP_RANKING,
+            "janela": JANELA,
+            "meta": META_DIAS,
+            "evasaoDias": EVASAO_DIAS,
+            "topParados": TOP_PARADOS,
+            "celulaGrau": CELULA,
+            "celulaKm": round(CELULA * 111),
+            "vetorDias": 91,
+            "safraMin": SAFRA_MIN,
+            # o ano em que o editor mais antigo do país começou
+            "primeiroAno": min([e["ano"] for e in eds if e["ano"]] or [0]),
+        },
         "resumo": {
             "ativos30": ativos30,
             "ativos90": len(abas["d90"]),
             "historico": len(eds),
             "edicoes90": tot90,
             "top50": concentracao[3][1],
+            "deltaFds": delta_fds,
+            "retencao": retencao,
             "novos": sum(n for a, n, _ in entrada if a >= hoje.year - 1),
             "fator1": sum(1 for r in estados if r[3] == 1),
         },
@@ -429,18 +476,20 @@ PAGE = r"""<meta charset="utf-8">
   <div class="paineis" id="paineis"></div>
 
   <footer>
-    <p><b>De onde vem.</b> A lista de editores sai de 84 rankings do Waze — o
-    nacional e os 27 estaduais, nas três janelas que a API oferece, 500 linhas
-    cada. Varrer só o histórico deixava de fora 40% de quem edita hoje, porque
-    aquele ranking ordena por pontos acumulados. A atividade diária vem do
-    perfil de cada editor, que expõe os últimos 91 dias. Como os rankings
-    estaduais não se sobrepõem, a UF de cada um vem da varredura.</p>
+    <p><b>De onde vem.</b> A lista de editores sai de <span id="fRank"></span>
+    rankings do Waze — o nacional e os <span id="fUf"></span> estaduais, nas três
+    janelas que a API oferece, <span id="fCap"></span> linhas cada. Varrer só o
+    histórico deixaria de fora boa parte de quem edita hoje, porque aquele
+    ranking ordena por pontos acumulados. A atividade diária vem do perfil de
+    cada editor, que expõe os últimos <span id="fVet"></span> dias. Como os
+    rankings estaduais não se sobrepõem, a UF de cada um vem da varredura.</p>
     <p><b>Por que ordenar por atividade.</b> Os rankings do Waze ordenam por
-    pontos — dirigir e editar somados — e cortam em 500, então em janelas curtas
-    as vagas enchem de motorista. Ordenando pelas edições reais dos últimos 30
-    dias, o placar mostra quem está construindo o mapa agora, e não quem
-    acumulou mais desde 2011.</p>
-    <p><b>Tendência</b> compara os segundos 45 dias com os primeiros 45, e só
+    pontos — dirigir e editar somados — e cortam em <span id="fCap2"></span>,
+    então em janelas curtas as vagas enchem de motorista. Ordenando pelas
+    edições reais da janela escolhida, o placar mostra quem está construindo o
+    mapa agora, e não quem acumulou mais desde <span id="fAno"></span>.</p>
+    <p><b>Tendência</b> compara os segundos <span id="fMeta"></span> dias com os
+    primeiros <span id="fMeta2"></span>, e só
     aparece para quem tem volume suficiente no período. <b>Seq.</b> é o número de
     dias consecutivos editando, sem contar hoje, que está em andamento.</p>
     <p>Clique no nome para abrir o perfil do editor no Waze. Dados de
@@ -488,7 +537,7 @@ function faisca(sem) {
 function selos(e) {
   const s = [];
   // 4 em 5 editores são de segmento: esmaece o comum para os outros saltarem.
-  if (e[11]) s.push(`<span class="chip${e[11] === D.tipoComum ? " fraco" : ""}"
+  if (e[11]) s.push(`<span class="chip${e[11] === D.tipoComum[aba] ? " fraco" : ""}"
     title="Tipo de edição que domina o trabalho histórico">${esc(e[11])}</span>`);
   if (e[12]) s.push(`<span class="chip"
     title="${e[12] === "constante" ? "Edita quase todo dia, sem picos"
@@ -576,7 +625,8 @@ function mapa(m) {
     <p style="margin:12px 0 0;font-size:.8rem;color:var(--muted)">${legenda}</p>
     <p style="color:var(--muted);font-size:.8rem;margin:8px 0 0">
       ${NF.format(m.editores)} dos editores ativos gerenciam
-      ${NF.format(m.areas)} áreas. Cada quadrado tem meio grau (~55 km) e a cor
+      ${NF.format(m.areas)} áreas. Cada quadrado tem ${D.cfg.celulaGrau}° de lado
+      (~${D.cfg.celulaKm} km) e a cor
       diz quantos editores distintos o cobrem; onde não há quadrado, nenhum
       editor ativo gerencia. Projeção simples por latitude e longitude, sem
       contorno político — é um esboço de cobertura, não um mapa.
@@ -610,13 +660,13 @@ function paineis() {
   blocos.push(`<div class="painel"><h2>Concentração — quem sustenta o mapa</h2>
     ${barras(p.concentracao.map(([n, pc]) => ["top " + n, pc]), (v) => v + "%")}
     <p style="color:var(--muted);font-size:.8rem;margin:10px 0 0">
-    Fatia das edições dos últimos 90 dias.</p></div>`);
+    Fatia das edições dos últimos ${D.cfg.janela} dias.</p></div>`);
 
   blocos.push(`<div class="painel"><h2>Safras — entrada e sobrevivência</h2>
     ${p.entrada.map(([ano, n, viv]) => {
       const max = Math.max(...p.entrada.map((r) => r[1])) || 1;
       const pct = n ? Math.round(100 * viv / n) : 0;
-      const poucos = n < 10;
+      const poucos = n < D.cfg.safraMin;
       return `<div class="barra">
         <span>${ano}</span>
         <span class="t"><span class="f" style="width:${Math.max(1, (n / max) * 100)}%;display:block"></span></span>
@@ -626,9 +676,10 @@ function paineis() {
     }).join("")}
     <p style="color:var(--muted);font-size:.8rem;margin:10px 0 0">
     Barra é quantos entraram no ano; o percentual é quanto dessa safra ainda
-    edita hoje. Fica em torno de um sexto para quase todo ano, seja 2011 ou
-    2021. <span style="opacity:.7">* menos de 10 pessoas — o percentual oscila
-    demais para significar algo.</span></p></div>`);
+    edita hoje. A mediana das safras com <span id="fMin"></span> ou mais pessoas é
+    <b>${D.resumo.retencao}%</b>, e varia pouco de um ano para outro.
+    <span style="opacity:.7">* menos de ${D.cfg.safraMin} pessoas — o percentual
+    oscila demais para significar algo.</span></p></div>`);
 
   blocos.push(`<div class="painel"><h2>Vigília — produziam e emudeceram</h2>
     ${p.evasao.length ? `<table><thead><tr><th>Editor</th>
@@ -639,8 +690,8 @@ function paineis() {
        <td class="num down">${sil} d</td></tr>`).join("")}
     </tbody></table>` : `<p style="color:var(--muted)">Ninguém nessa situação.</p>`}
     <p style="color:var(--muted);font-size:.8rem;margin:10px 0 0">
-    Editaram nos primeiros 45 dias da janela e estão em silêncio há três semanas
-    ou mais. No mesmo período houve <b>${NF.format(p.retornos)}</b> retorno(s) —
+    Editaram nos primeiros ${D.cfg.meta} dias da janela e estão em silêncio há
+    ${D.cfg.evasaoDias} dias ou mais. No mesmo período houve <b>${NF.format(p.retornos)}</b> retorno(s) —
     editor parado que voltou a produzir.</p></div>`);
 
   blocos.push(`<div class="painel"><h2>Gigantes parados</h2>
@@ -653,17 +704,23 @@ function paineis() {
         <td class="num">${sil === null ? "90+ d" : sil + " d"}</td></tr>`).join("")}
     </tbody></table>
     <p style="color:var(--muted);font-size:.8rem;margin:10px 0 0">
-    Do top 60 histórico, os que praticamente não editam há 90 dias.</p></div>`);
+    Do top ${D.cfg.topParados} histórico, os que praticamente não editam há
+    ${D.cfg.janela} dias.</p></div>`);
 
   blocos.push(`<div class="painel"><h2>Ritmo semanal — 90 dias</h2>
     ${barras(p.semana, (v) => NF.format(v))}
     <p style="color:var(--muted);font-size:.8rem;margin:10px 0 0">
-    Não há pico de fim de semana. Qual dia lidera muda de uma coleta para
-    outra — é ruído, não padrão.</p></div>`);
+    ${(() => { const d = D.resumo.deltaFds;
+       if (Math.abs(d) < 5) return "Fim de semana e dia útil rendem praticamente o mesmo.";
+       return `O fim de semana rende <b>${d > 0 ? "+" : ""}${d}%</b> em relação ao dia
+               útil médio.`; })()}
+    Qual dia exatamente lidera oscila entre coletas.</p></div>`);
 
   blocos.push(mapa(p.mapa));
 
   $("paineis").innerHTML = blocos.join("");
+  const m2 = $("fMin");
+  if (m2) m2.textContent = D.cfg.safraMin;
 }
 
 function montaUfs() {
@@ -698,6 +755,12 @@ function build() {
     montaUfs();
     render();
   };
+  const c = D.cfg;
+  [["fRank", c.rankings], ["fUf", c.ufs], ["fCap", c.cap], ["fCap2", c.cap],
+   ["fVet", c.vetorDias], ["fMeta", c.meta], ["fMeta2", c.meta],
+   ["fAno", c.primeiroAno], ["fMin", c.safraMin]]
+    .forEach(([id, v]) => { const el = $(id); if (el) el.textContent = NF.format(v); });
+
   montaUfs();
   $("q").oninput = render;
   $("uf").onchange = render;
