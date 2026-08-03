@@ -155,5 +155,22 @@ suporte a outros países, removidos daqui por estarem fora do escopo atual.
   nada dali entra no placar.
 - `level` some do registro de quem nunca editou. Não assuma que a chave existe.
 
-O contrato completo da API, com as medições, está em
-[`docs/api-recon.md`](docs/api-recon.md).
+## Antes de mexer
+
+[`docs/api-recon.md`](docs/api-recon.md) é a referência da API: os dois backends,
+os oito endpoints, e principalmente as armadilhas — o `lookbackPeriod` que aceita
+valor inválido e responde 200 com outra coisa, o `Areas` que só funciona num dos
+ambientes, a lista de afilhados truncada em 10, a paginação de transações que não
+pagina, o campo `level` que some, a sessão rolante. Cada uma dessas custou uma
+conclusão errada aqui antes de virar uma linha no documento.
+
+`scripts/auditar-layout.mjs` abre a página gerada num navegador em quatro
+larguras e falha se algo rolar lateralmente ou vazar do painel. Precisa de
+`npm i playwright`. Vale rodar depois de mexer no `pagina.py`: validar por
+métrica no Python deixou passar uma tabela que estourava em todas as larguras.
+
+## Estado
+
+Tudo que o projeto sabe está no repositório: código, este README e o documento
+da API. Não há banco, não há estado entre execuções, e nenhum dado coletado é
+versionado — cada execução refaz tudo do zero contra a API.

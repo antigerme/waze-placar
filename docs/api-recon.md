@@ -1,175 +1,201 @@
-# Waze Leaderboard API — recon notes
+# A API do Waze, como ela realmente se comporta
 
-Reverse-engineered from the live SPA at <https://www.waze.com/leaderboard>
-(bundle `https://web-assets.waze.com/orbit/leaderboard-*.js`), then corrected
-against a HAR capture of the real client driving the UI.
+Tudo aqui foi verificado contra a API viva, não deduzido do código do cliente.
+Onde há número, ele foi medido; onde algo não foi testado, está dito.
 
-The page was never deleted — only de-linked from Waze's navigation. It still
-renders and its backing API still serves data.
+Dois backends distintos atendem o placar, e eles não se comportam igual:
 
-## Endpoint
+- **`/_user/api/…`** serve os rankings.
+- **`/{ambiente}/app/…`** é o Descartes, e serve perfil, áreas, edições e
+  mentoria. O `{ambiente}` é `Descartes`, `row-Descartes` (rest of world) ou
+  `il-Descartes`.
+
+Os dois exigem sessão. Sem cookie, o ranking devolve 401 e o Descartes 403.
+
+---
+
+## Rankings
 
 ```
-GET https://www.waze.com/_user/api/leaderboard
+GET /_user/api/leaderboard
 ```
 
-Authentication is by session cookie (`_web_session` on `www.waze.com`).
-No `Authorization` header, no CSRF token needed for `GET`.
+| Parâmetro | Valores | Efeito |
+|---|---|---|
+| `lookbackPeriod` | `ALL_TIME`, `PAST_MONTH`, `PAST_WEEK` | Janela |
+| `countryCode` | ISO 3166-1 alpha-2 | Ranking nacional |
+| `stateCode` | **ISO 3166-2** (`BR-SP`) | Subdivisão; exige `countryCode` |
+| `wazerCountryLeaderboard` | `true` | Nacional do próprio usuário |
+| `show_editor_levels` | `true`/`false` | **Nenhum** — `level` vem dos dois jeitos |
 
-### Query parameters
+**A armadilha do `lookbackPeriod`.** Só aqueles três valores existem. Qualquer
+outro — `PAST_YEAR`, `LAST_7_DAYS`, lixo puro — devolve **200 com o payload de
+`ALL_TIME`**, sem erro. Sondar o parâmetro com nomes inventados faz ele parecer
+inerte. Foi assim que a primeira leitura deste projeto concluiu, errado, que
+não havia janela nenhuma.
 
-| Param                    | Values                                      | Effect |
-|--------------------------|---------------------------------------------|--------|
-| `lookbackPeriod`         | `ALL_TIME`, `PAST_WEEK`, `PAST_MONTH`       | Time window. **Anything else silently falls back to `ALL_TIME`** |
-| `countryCode`            | ISO 3166-1 alpha-2 (`BR`)                   | National board |
-| `stateCode`              | **ISO 3166-2** (`BR-SP`)                    | Subdivision board; requires `countryCode` |
-| `wazerCountryLeaderboard`| `true`                                      | National board for the *caller's own* country |
-| `show_editor_levels`     | `true` / `false`                            | **No observable effect** — `level` is returned either way |
+**Teto de 500 linhas, sem paginação.** `offset`, `page`, `limit`, `count` e
+`start` são todos ignorados.
 
-Omitting the geography parameters returns the global board.
+**Ordena por `points`, não por edições.** `points` soma dirigir e editar, e é a
+chave de ordenação. Medido: **99% das linhas dos rankings de janela são de quem
+não editou nada no período.**
 
-The page itself takes matching parameters, so boards are deep-linkable:
-`/leaderboard?region=BR&province=BR-BA&lookbackPeriod=PAST_MONTH`
-(`region=GLOBAL` and `province=ALL` are the wildcards).
+**Rankings estaduais não se sobrepõem.** Verificado: 3.000 editores em seis
+rankings estaduais, nenhum repetido. Isso deixa atribuir a UF de graça. E quem
+está no top 500 nacional está necessariamente no top 500 do próprio estado,
+porque o estado é subconjunto do país.
 
-### Response
+**Varrer só `ALL_TIME` não basta.** Ele ordena por pontos acumulados, então
+quem edita muito hoje mas tem pouco histórico fica fora. Medido: **42% dos
+editores ativos nos rankings de janela não aparecem na varredura `ALL_TIME`.**
+
+### Resposta
 
 ```jsonc
 {
-  "record": [
-    {
-      "userId":       "88679",
-      "points":       "23753477",   // Waze points (driving + editing) in window
-      "username":     "asterix06",
-      "moodUrl":      "https://dexter.waze.com/4/2239/$mood.mood_id/x3_ui.png",
-      "countryCode":  "IT",
-      "mapEditCount": "6500610",    // map edits in window
-      "level":        "6"           // editor level 1-6; ABSENT for non-editors
-    }
-    // ... up to 500
-  ],
-  "wazerDetails": { /* same shape, for the authenticated caller */ },
-  "rank": 3                          // caller's rank; absent on subdivision boards
+  "record": [{
+    "userId": "88679", "username": "asterix06", "countryCode": "IT",
+    "points": "23753477",      // dirigir + editar, na janela
+    "mapEditCount": "6500610", // edições na janela
+    "level": "6",              // AUSENTE para quem nunca editou
+    "moodUrl": "…/$mood.mood_id/…"
+  }],
+  "wazerDetails": { },          // o próprio chamador
+  "rank": 3                     // posição do chamador; ausente em subdivisão
 }
 ```
 
-All numeric fields are **strings**. `moodUrl` contains a literal
-`$mood.mood_id` placeholder that the client substitutes.
+Números vêm como string. **`level` é opcional por registro** — aparece só para
+quem tem `mapEditCount > 0`.
 
-**`level` is optional per record**, not per response — it appears only for users
-who have actually edited. In the global `ALL_TIME` board, exactly the 355 users
-with `mapEditCount > 0` carry a `level`; the other 145 omit the key entirely.
-Parsers must not assume it exists.
+---
 
-## Findings that shape the design
+## Perfil
 
-### 1. Three real windows, and a silent-fallback trap
+```
+GET /{ambiente}/app/UserProfile/Profile?username=<nome>
+```
 
-`ALL_TIME`, `PAST_WEEK` and `PAST_MONTH` return genuinely different data. Every
-other value — `PAST_YEAR`, `PAST_DAY`, `TODAY`, `LAST_7_DAYS`, or outright
-garbage — returns the `ALL_TIME` payload with a `200`, no error, no warning.
+Indiferente ao ambiente: os três devolvem idêntico. Funciona para qualquer
+editor. Usuário inexistente devolve **500**, não 404.
 
-That fallback is the single easiest way to draw a wrong conclusion from this
-API: probing it with invented enum values makes the parameter look inert. The
-harvester enforces the enum client-side for exactly this reason.
+Campos que importam:
 
-### 2. Hard cap of 500 rows, no pagination
+- **`editingActivity`** — 91 inteiros, um por dia. Índice 0 é 90 dias atrás, o
+  último é hoje e vem parcial. Verificado: os 2.534 perfis coletados têm
+  exatamente 91 posições.
+- `rank` — é o `level` do ranking **menos 1**.
+- `editsByType` — sete categorias. **`count` vem `null` com frequência** (11 mil
+  campos nulos numa coleta) e a soma não fecha com `edits`.
+- `mentees[]` — **truncada em 10**. Verificado nos três mentores com mais que
+  isso: todos cortados em exatamente 10. Use `Mentoring/Mentees`.
+- `firstEditDate`, `isMentor`, `menteesCount`, `forumPosts`, `lastEditEnv`.
 
-`offset`, `page`, `limit`, `count`, and `start` are all ignored; every board
-returns exactly 500 rows (or 0 for an unknown code).
+Os números do vetor diário **não batem** com as janelas do ranking. Num teste,
+30 dias somados deram 27.936 contra 28.244 do `PAST_MONTH`; na semana a
+distância foi maior. São relógios ou definições diferentes — use um ou outro,
+não misture.
 
-### 3. Boards rank by `points`, not by edits
+---
 
-`points` is the unified Waze score, earned from driving *and* editing, and it
-is the sort key on every board. So the 500 slots are contested by commuters as
-well as editors. On the global `ALL_TIME` board 241 of the 500 have fewer than
-100 map edits, and the #500 slot belongs to a user with **2**.
+## Áreas gerenciadas
 
-A real editors' board therefore has to re-sort by `mapEditCount` and discard
-zero-edit rows.
+```
+GET /row-Descartes/app/UserProfile/Areas?userID=<id>
+```
 
-### 4. Geographic sharding defeats the 500 cap
+**Aqui o ambiente importa**, ao contrário do perfil. Para editor brasileiro só
+`row-Descartes` devolve polígono; `Descartes` e `il-Descartes` respondem 200 com
+`managedAreas` vazio. Isso já causou uma coleta zerada neste projeto.
 
-Each subdivision is its own 500-row board with heavy non-overlap:
+Os polígonos são reais, não caixas: **até 3.445 vértices**. Embutir a geometria
+crua numa página é inviável — o projeto rasteriza numa grade.
 
-| Board        | rows | new vs. national |
-|--------------|------|------------------|
-| BR national  | 500  | —                |
-| BR-SP        | 500  | 208              |
-| BR-RJ        | 500  | 435              |
-| BR-MG        | 500  | 481              |
-| BR-BA        | 500  | 488              |
-| BR-RS        | 500  | 467              |
-| BR-PR        | 500  | 482              |
+---
 
-A full Brazil sweep — national plus all 27 subdivisions, 28 requests — yields
-**13,498 distinct users, 2,179 of them with at least one edit**.
+## Edições recentes
 
-Subdivision codes must be full ISO 3166-2 — `BR-SP` works, bare `SP` returns 0
-rows, as do `California` and numeric codes.
+```
+GET /row-Descartes/app/UserProfile/Transactions?userID=<id>
+```
 
-Subdivision boards are also **mutually exclusive**: across the six Brazilian
-state boards above, 3,000 users appeared and not one showed up on two boards.
-So a sweep attributes a home state to every editor for free — something the
-Waze UI never displays in the list. National-board members are always covered,
-since ranking in a country's top 500 by points implies ranking in your own
-state's top 500.
+As dez últimas edições, com `centroid` (ponto GeoJSON), `street`, `city`,
+`country`, `daysSince` e `operations[]` com `actionType` e `objectType`.
 
-### 5. Editor density collapses on short windows — the reason to still snapshot
+**A paginação não existe.** O campo `nextTransactionDate` parece cursor, mas
+reenviá-lo devolve a mesma página — conferido comparando os `daysSince` das duas
+chamadas.
 
-Because boards sort by points, a short window fills up with drivers. Measured
-editor share of the 500 rows:
+**"Dez últimas" não quer dizer recentes.** Para quem edita pouco elas podem ser
+de anos atrás: a coleta trouxe transação de **3.927 dias**. Filtre por janela.
 
-| Board                 | ALL_TIME | PAST_WEEK | PAST_MONTH |
-|-----------------------|----------|-----------|------------|
-| Global                | 71.0%    | 61.6%     | 60.0%      |
-| BR national           | 45.0%    | 10.4%     | 8.2%       |
-| BR-SP                 | —        | 2.0%      | —          |
-| BR-BA                 | —        | —         | 1.0%       |
+A geocodificação é parcial: **cerca de 69%** trazem `city`.
 
-The effect compounds across a sweep. The same 28-board Brazil sweep returns:
+---
 
-- `ALL_TIME` → **2,179** editors
-- `PAST_MONTH` → **77** active editors
+## Mentoria
 
-So Waze's own monthly board surfaces roughly 3.5% of Brazil's tracked editor
-base. Diffing two `ALL_TIME` snapshots a month apart instead reveals every one
-of the 2,179 who edited in between.
+```
+GET /{ambiente}/app/Mentoring/Mentees?userID=<id>     # lista completa
+GET /row-Descartes/app/Mentoring/NewEditors           # sem parâmetro nenhum
+GET /{ambiente}/app/Mentoring/Communities?mentorID=   # só o link do fórum
+```
 
-**Design consequence:** snapshot diffing would recover all 2,179 and unlock
-windows the API has no enum for, but it needs somewhere to keep the snapshots.
-With no datastore in scope, the project ships the three native windows as-is
-and states the shortfall on the page itself. The diffing collector lives in
-this repo's git history if storage ever appears.
+`Mentees` devolve a lista inteira, sem o corte de 10 do perfil.
 
-### 6. No rate limiting observed
+**`NewEditors` é o achado mais importante para cobertura.** Devolve editores
+recém-chegados — 319 brasileiros de 2025 e 2026 numa coleta — e **316 deles não
+apareciam em nenhum dos 84 rankings**, porque quem tem três edições não pontua o
+bastante para entrar. Sem esse endpoint o funil de entrada some do placar, e é
+fácil concluir, errado, que a comunidade parou de receber gente. A lista é
+nacional: idêntica seja qual for o mentor que consulta, e não precisa de
+parâmetro.
 
-12 back-to-back requests all returned `200`. The harvester still throttles
-deliberately — this is someone else's infrastructure and a global sweep is
-thousands of requests.
+`AddMentee` e `ArchiveMentee` existem e **alteram estado** — nunca foram
+chamados aqui.
 
-## Sibling endpoints
+---
 
-- `/_user/api/user` and `/il-UsersProfile/app/userInfo` — the caller's own
-  profile. Both **ignore a `userId` param**, so neither is an arbitrary-user
-  lookup. Both return real PII for the caller: full name, email, city, last
-  known coordinates, last login. Nothing from them belongs in a dataset.
-- `/web_api/request_info?source=cookie_consent` — geo-IP for the caller;
-  returns `region` (`BR`) and `regionSubdivision` (`BRBA`, note: no hyphen,
-  so it needs reformatting before use as a `stateCode`). Useful for defaulting
-  a visitor to their local board.
-- `/_user/api/trip`, `/_user/api/notifications/preferences` — not explored.
+## Sessão
 
-## Assets
+**Ela se renova sozinha.** O Descartes responde os perfis com `Set-Cookie` de
+`_web_session`: a sessão é rolante. Gravar o cookie jar de volta no arquivo ao
+fim da execução é o que dispensa reexportar do navegador. Verificado em três
+execuções seguidas, com o token rotacionando e a seguinte autenticando com o que
+a anterior gravou.
 
-- Mood icons: `https://dexter.waze.com/4/<moodId>/$mood.mood_id/x3_ui.png` —
-  the `$mood.mood_id` segment is sent literally by the browser.
-- Profile photos: `https://profileimages.waze.co.il/SocialMediaServer/images/profile/<uuid>`,
-  available only via the caller's own profile payload.
+**O que a renovação não faz:** empurrar o prazo absoluto do cookie. Ele fica
+fixo na data em que a sessão nasceu no navegador, cerca de 30 dias. O que a
+rotação sustenta é o tempo ocioso do servidor, curto.
 
-## Still unknown
+**Os dois backends expiram em ritmos diferentes.** Já foi observado o ranking
+respondendo 200 enquanto todo perfil devolvia 403 com
+`"This operation is not allowed by guest user"`. Tratar 403 como "sessão morta"
+e abortar tudo é errado — o placar ainda é coletável.
 
-No Champs-only data source appeared in the capture — the HAR is the same public
-`/_user/api/leaderboard` the anonymous SPA uses. Nothing observed exposes
-per-user edit *history*, nor any editor outside a board's top 500. If a
-separate Champs feed exists it lives somewhere this capture didn't touch.
+---
+
+## Endpoints com PII, fora de uso
+
+- `/_user/api/user` e `/il-UsersProfile/app/userInfo` — perfil do **próprio
+  chamador**: nome completo, e-mail, cidade, última coordenada, último login.
+  Ambos ignoram um parâmetro `userId`, então não servem para consultar
+  terceiros. Nada dali entra em dataset.
+- `/_user/api/trip` — histórico de navegação do próprio usuário, com origem e
+  destino nomeados.
+- `/web_api/request_info` — geo-IP do visitante; devolve `region` e
+  `regionSubdivision` (formato `BRBA`, sem hífen).
+
+---
+
+## Ritmo
+
+Nenhum rate limiting foi observado, mas isso **não foi testado a fundo** de
+propósito: descobrir o teto castigando a infraestrutura do Waze é exatamente o
+que não se quer fazer. O coletor usa throttle global com jitter de 0,45 a 1,15 s
+entre requisições — ~1,25 req/s medidos — e embaralha a ordem dos editores para
+o tráfego não desenhar a sequência do ranking.
+
+Uma execução completa hoje: 84 rankings + 1 lista de novatos + ~2.500 perfis +
+23 listas de afilhados + ~90 perfis de afilhados + ~290 áreas + ~290 transações.
