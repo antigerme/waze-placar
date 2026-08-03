@@ -333,11 +333,13 @@ PAGE = r"""<meta charset="utf-8">
            white-space:nowrap }
   th { font-size:.72rem; text-transform:uppercase; letter-spacing:.06em;
        color:var(--muted); font-weight:600; position:sticky; top:0;
-       background:var(--card) }
+       background:var(--card); white-space:normal }
   tr:last-child td { border-bottom:none }
   td.num, th.num { text-align:right }
-  .pos { color:var(--muted); width:56px }
-  .name { font-weight:600; width:99%; white-space:normal }
+  .pos { color:var(--muted); width:46px }
+  .name { font-weight:600; width:99%; white-space:normal; line-height:1.35;
+          overflow-wrap:anywhere }
+  .name .selos { display:flex; flex-wrap:wrap; gap:4px; margin-top:3px }
   .name a { color:inherit; text-decoration:none }
   .name a:hover, .name a:focus-visible { color:var(--series);
                                          text-decoration:underline }
@@ -368,11 +370,29 @@ PAGE = r"""<meta charset="utf-8">
               min-width:2px }
   .barra .v { color:var(--muted); font-variant-numeric:tabular-nums;
               font-size:.8rem }
-  .painel table { font-size:.85rem }
-  .painel td, .painel th { padding:5px 8px; border-bottom:1px solid var(--line) }
+  .painel table { font-size:.85rem; width:100% }
+  .painel td, .painel th { padding:5px 8px; border-bottom:1px solid var(--line);
+                           white-space:normal }
+  .painel td.num, .painel th.num { white-space:nowrap }
   .painel .rola { overflow-x:auto; margin:0 -4px; padding:0 4px }
-  .painel td.quebra { white-space:normal; min-width:110px }
+  .painel td.quebra { white-space:normal; min-width:110px;
+                      overflow-wrap:anywhere }
+  @media (max-width:620px) { .painel td.quebra { min-width:0 } }
   @media (min-width:720px) { .painel.largo { grid-column:span 2 } }
+
+  @media (max-width:560px) {
+    .wrap { padding:20px 12px 48px }
+    th, td { padding:8px 6px }
+    .pos { width:26px }
+    .medal { display:none }        /* a medalha alarga a coluna do posto */
+    .chip { padding:1px 5px; font-size:.7rem }
+  }
+  /* Em vez de rolagem lateral, o que é secundário some conforme aperta. */
+  @media (max-width:980px) { .c-hist { display:none } }
+  @media (max-width:820px) { .c-seq  { display:none } }
+  @media (max-width:660px) { .c-spark { display:none } }
+  @media (max-width:520px) { .c-tend { display:none } }
+  @media (max-width:620px) { .c-ativos { display:none } }
 
   footer { margin-top:24px; color:var(--muted); font-size:.8rem }
   footer p { margin:.45em 0 }
@@ -395,12 +415,11 @@ PAGE = r"""<meta charset="utf-8">
   <div class="tablewrap">
     <table>
       <thead><tr>
-        <th class="pos">#</th><th>Editor</th><th>UF</th><th>Nível</th>
-        <th>Perfil</th>
+        <th class="pos">#</th><th>Editor</th>
         <th class="num" id="thJanela">Edições</th>
-        <th>90 dias</th>
-        <th class="num">Seq.</th><th class="num">Tend.</th>
-        <th class="num">Histórico</th>
+        <th class="c-spark">90 dias</th>
+        <th class="num c-seq">Seq.</th><th class="num c-tend">Tend.</th>
+        <th class="num c-hist">Histórico</th>
       </tr></thead>
       <tbody id="body"></tbody>
     </table>
@@ -497,15 +516,14 @@ function render() {
       <td class="pos">${n + 1}</td>
       <td class="name"><a href="${esc(perfil(e[0]))}" target="_blank"
          rel="noopener noreferrer" title="Ver perfil de ${esc(e[0])} no Waze"
-         >${esc(e[0])}</a></td>
-      <td><span class="chip">${e[1] || "--"}</span></td>
-      <td>${e[2] ? `<span class="chip">N${e[2]}</span>` : ""}</td>
-      <td>${selos(e)}</td>
+         >${esc(e[0])}</a>
+        <span class="selos"><span class="chip">${e[1] || "--"}</span>${
+          e[2] ? `<span class="chip">N${e[2]}</span>` : ""}${selos(e)}</span></td>
       <td class="num">${NF.format(e[c])}</td>
-      <td>${faisca(e[9])}</td>
-      <td class="num">${e[7] || ""}</td>
-      <td class="num">${tend(e[8])}</td>
-      <td class="num">${NF.format(e[3])}</td>
+      <td class="c-spark">${faisca(e[9])}</td>
+      <td class="num c-seq">${e[7] || ""}</td>
+      <td class="num c-tend">${tend(e[8])}</td>
+      <td class="num c-hist">${NF.format(e[3])}</td>
     </tr>`).join("");
   $("empty").hidden = lista.length > 0;
   $("thJanela").textContent =
@@ -571,18 +589,18 @@ function paineis() {
   const blocos = [];
 
   blocos.push(`<div class="painel largo"><h2>Estados — quem seguraria a queda</h2>
-    <div class="rola"><table><thead><tr><th>UF</th><th class="num">Edições</th>
+    <table><thead><tr><th>UF</th><th class="num">Edições</th>
     <th class="num">Ativos</th><th class="num">Fator</th>
     <th>Maior editor</th></tr></thead><tbody>
     ${p.estados.slice(0, 14).map(([uf, ed, n, fator, topo, pct]) => `<tr>
        <td><span class="chip">${uf}</span></td>
        <td class="num">${NF.format(ed)}</td>
-       <td class="num">${n}</td>
+       <td class="num c-ativos">${n}</td>
        <td class="num ${fator === 1 ? "down" : ""}">${fator}</td>
        <td class="quebra">${link(topo)}
          <span style="color:var(--muted)">${pct}%</span></td>
       </tr>`).join("")}
-    </tbody></table></div>
+    </tbody></table>
     <p style="color:var(--muted);font-size:.8rem;margin:10px 0 0">
     <b>Fator</b> é quantos editores precisariam parar para o estado perder
     metade das edições. Fator 1 significa que um único editor responde por
@@ -613,26 +631,27 @@ function paineis() {
     demais para significar algo.</span></p></div>`);
 
   blocos.push(`<div class="painel"><h2>Vigília — produziam e emudeceram</h2>
-    ${p.evasao.length ? `<div class="rola"><table><thead><tr><th>Editor</th>
+    ${p.evasao.length ? `<table><thead><tr><th>Editor</th>
     <th class="num">Antes</th><th class="num">Calado</th></tr></thead><tbody>
     ${p.evasao.map(([u, uf, prim, sil]) => `<tr>
        <td>${link(u)} <span class="chip">${uf || "--"}</span></td>
        <td class="num">${NF.format(prim)}</td>
        <td class="num down">${sil} d</td></tr>`).join("")}
-    </tbody></table></div>` : `<p style="color:var(--muted)">Ninguém nessa situação.</p>`}
+    </tbody></table>` : `<p style="color:var(--muted)">Ninguém nessa situação.</p>`}
     <p style="color:var(--muted);font-size:.8rem;margin:10px 0 0">
     Editaram nos primeiros 45 dias da janela e estão em silêncio há três semanas
     ou mais. No mesmo período houve <b>${NF.format(p.retornos)}</b> retorno(s) —
     editor parado que voltou a produzir.</p></div>`);
 
   blocos.push(`<div class="painel"><h2>Gigantes parados</h2>
-    <div class="rola"><table><thead><tr><th>#</th><th>Editor</th><th class="num">Total</th><th class="num">Parado</th></tr></thead><tbody>
+    <table><thead><tr><th>Editor</th><th class="num">Total</th>
+    <th class="num">Parado</th></tr></thead><tbody>
     ${p.parados.map(([u, uf, tot, d90, pos, sil]) => `<tr>
-        <td style="color:var(--muted)">${pos}</td>
-        <td>${link(u)} <span class="chip">${uf || "--"}</span></td>
+        <td><span style="color:var(--muted)">${pos}.</span> ${link(u)}
+            <span class="chip">${uf || "--"}</span></td>
         <td class="num">${NF.format(tot)}</td>
         <td class="num">${sil === null ? "90+ d" : sil + " d"}</td></tr>`).join("")}
-    </tbody></table></div>
+    </tbody></table>
     <p style="color:var(--muted);font-size:.8rem;margin:10px 0 0">
     Do top 60 histórico, os que praticamente não editam há 90 dias.</p></div>`);
 
