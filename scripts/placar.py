@@ -78,9 +78,9 @@ def main() -> None:
         atexit.register(lambda: waze.salva_cookies(opener))
 
     if not args.quiet:
-        print("varrendo os 28 rankings…", file=sys.stderr)
+        print("varrendo os rankings (28 por janela, 3 janelas)…", file=sys.stderr)
     try:
-        editores, falhas = waze.coleta_placar(opener, "ALL_TIME", quiet=args.quiet)
+        editores, falhas = waze.universo(opener, quiet=args.quiet)
     except waze.SemPermissao as exc:
         sys.exit("{} — sessão expirada. Atualize {}.".format(exc, args.cookies))
     if falhas and not args.allow_partial:

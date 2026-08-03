@@ -44,7 +44,7 @@ def main() -> None:
         if not args.quiet:
             print("varrendo o placar para listar os editores…", file=sys.stderr)
         try:
-            editores, falhas = waze.coleta_placar(opener, "ALL_TIME", quiet=True)
+            editores, falhas = waze.universo(opener, quiet=True)
         except waze.SemPermissao as exc:
             sys.exit("{} — sessão expirada. Atualize {}.".format(exc, args.cookies))
         if falhas:

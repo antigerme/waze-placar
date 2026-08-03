@@ -246,6 +246,37 @@ def coleta_placar(opener, period="ALL_TIME",
     return ranked, falhas
 
 
+def universo(opener, quiet=False) -> Tuple[List[dict], List[str]]:
+    """Junta as três janelas para montar a lista de editores.
+
+    Só a varredura ALL_TIME não basta: ela ordena por pontos acumulados e corta
+    em 500, então quem edita muito hoje mas tem pouco ponto de histórico fica de
+    fora. Medido: 40% dos editores ativos nos rankings PAST_WEEK/PAST_MONTH não
+    apareciam na varredura ALL_TIME — inclusive gente com 15 mil edições no mês.
+
+    Custa 56 requisições a mais, contra os ~30 min da coleta de perfis.
+    """
+    juntos = {}                      # type: Dict[str, dict]
+    falhas = []                      # type: List[str]
+    for periodo in PERIODS:
+        if not quiet:
+            print("  varrendo {}…".format(periodo), file=sys.stderr)
+        rows, f = coleta_placar(opener, periodo, quiet=True)
+        falhas += f
+        for r in rows:
+            cur = juntos.get(r["username"])
+            if cur is None:
+                # `edits` da janela não serve como total; o perfil corrige depois.
+                juntos[r["username"]] = dict(r, edits=r["edits"] if
+                                             periodo == "ALL_TIME" else 0)
+            else:
+                if periodo == "ALL_TIME":
+                    cur["edits"] = max(cur["edits"], r["edits"])
+                cur["uf"] = cur["uf"] or r["uf"]
+                cur["level"] = cur["level"] or r["level"]
+    return sorted(juntos.values(), key=lambda r: -r["edits"]), falhas
+
+
 # ------------------------------------------------------------------- perfis
 
 def normaliza_perfil(username: str, d: dict) -> dict:
