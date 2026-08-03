@@ -20,6 +20,7 @@ EVASAO_DIAS = 21      # silêncio que liga o alerta
 EVASAO_MIN = 300      # produção mínima na 1ª metade para entrar na vigília
 TOP_PARADOS = 60      # recorte do histórico para os "gigantes parados"
 SAFRA_MIN = 10        # tamanho mínimo de safra para a taxa significar algo
+SAFRA_MADURA = 5      # anos para a safra ter tido tempo de perder quem ia sair
 CAP_RANKING = 500     # teto de linhas por ranking, imposto pela API
 
 
@@ -153,9 +154,10 @@ def _grade_cobertura(areas, ufs):
     }
 
 
-def prepara(perfis, ufs, gerado, areas=None):
+def prepara(perfis, ufs, gerado, areas=None, estat=None):
     """Transforma os perfis crus na carga que a página consome."""
     areas = areas or {}
+    estat = estat or {}
     eds = []
     for p in perfis:
         act = (p.get("activity") or [])
@@ -263,8 +265,13 @@ def prepara(perfis, ufs, gerado, areas=None):
     delta_fds = round(100 * (fds / util - 1)) if util else 0
 
     # Retenção típica das safras com gente suficiente para a razão significar algo.
-    taxas = sorted(round(100 * viv / n) for _, n, viv in entrada if n >= SAFRA_MIN)
+    # Safra recente sobe por construção: quem entrou este ano ainda não teve
+    # tempo de sair. Comparar só as maduras, e dizer isso na página.
+    limite_safra = hoje.year - SAFRA_MADURA
+    taxas = sorted(round(100 * viv / n) for a, n, viv in entrada
+                   if n >= SAFRA_MIN and a <= limite_safra)
     retencao = taxas[len(taxas) // 2] if taxas else 0
+    faixa = [taxas[0], taxas[-1]] if taxas else [0, 0]
 
     ativos30 = len(abas["d30"])
     return {
@@ -290,7 +297,9 @@ def prepara(perfis, ufs, gerado, areas=None):
             "safraMin": SAFRA_MIN,
             # o ano em que o editor mais antigo do país começou
             "primeiroAno": min([e["ano"] for e in eds if e["ano"]] or [0]),
+            "paradoMax": 100,        # limiar de "praticamente não edita"
         },
+        "estat": estat,
         "resumo": {
             "ativos30": ativos30,
             "ativos90": len(abas["d90"]),
@@ -299,6 +308,8 @@ def prepara(perfis, ufs, gerado, areas=None):
             "top50": concentracao[3][1],
             "deltaFds": delta_fds,
             "retencao": retencao,
+            "faixaRetencao": faixa,
+            "safraLimite": limite_safra,
             "novos": sum(n for a, n, _ in entrada if a >= hoje.year - 1),
             "fator1": sum(1 for r in estados if r[3] == 1),
         },
@@ -478,16 +489,19 @@ PAGE = r"""<meta charset="utf-8">
   <footer>
     <p><b>De onde vem.</b> A lista de editores sai de <span id="fRank"></span>
     rankings do Waze — o nacional e os <span id="fUf"></span> estaduais, nas três
-    janelas que a API oferece, <span id="fCap"></span> linhas cada. Varrer só o
-    histórico deixaria de fora boa parte de quem edita hoje, porque aquele
-    ranking ordena por pontos acumulados. A atividade diária vem do perfil de
+    janelas que a API oferece, <span id="fCap"></span> linhas cada. As três
+    entram porque o ranking histórico ordena por pontos acumulados: nesta
+    coleta, <span id="fGap"></span> dos editores ativos não apareceriam se só
+    ele fosse varrido. A atividade diária vem do perfil de
     cada editor, que expõe os últimos <span id="fVet"></span> dias. Como os
     rankings estaduais não se sobrepõem, a UF de cada um vem da varredura.</p>
     <p><b>Por que ordenar por atividade.</b> Os rankings do Waze ordenam por
-    pontos — dirigir e editar somados — e cortam em <span id="fCap2"></span>,
-    então em janelas curtas as vagas enchem de motorista. Ordenando pelas
-    edições reais da janela escolhida, o placar mostra quem está construindo o
-    mapa agora, e não quem acumulou mais desde <span id="fAno"></span>.</p>
+    pontos — dirigir e editar somados — e cortam em <span id="fCap2"></span>
+    linhas. Como o critério não separa dirigir de editar,
+    <span id="fZero"></span> das linhas dos rankings de janela são de quem não
+    fez nenhuma edição no período. Ordenando pelas edições reais da janela
+    escolhida, o placar mostra quem está construindo o mapa agora, e não quem
+    acumulou mais desde <span id="fAno"></span>.</p>
     <p><b>Tendência</b> compara os segundos <span id="fMeta"></span> dias com os
     primeiros <span id="fMeta2"></span>, e só
     aparece para quem tem volume suficiente no período. <b>Seq.</b> é o número de
@@ -676,8 +690,11 @@ function paineis() {
     }).join("")}
     <p style="color:var(--muted);font-size:.8rem;margin:10px 0 0">
     Barra é quantos entraram no ano; o percentual é quanto dessa safra ainda
-    edita hoje. A mediana das safras com <span id="fMin"></span> ou mais pessoas é
-    <b>${D.resumo.retencao}%</b>, e varia pouco de um ano para outro.
+    edita hoje. Entre as safras de ${D.resumo.safraLimite} ou antes — velhas o
+    bastante para já terem perdido quem ia sair — a mediana é
+    <b>${D.resumo.retencao}%</b>, variando de ${D.resumo.faixaRetencao[0]}% a
+    ${D.resumo.faixaRetencao[1]}%. As safras recentes aparecem mais altas porque
+    ainda não tiveram tempo de evadir.
     <span style="opacity:.7">* menos de ${D.cfg.safraMin} pessoas — o percentual
     oscila demais para significar algo.</span></p></div>`);
 
@@ -704,8 +721,8 @@ function paineis() {
         <td class="num">${sil === null ? "90+ d" : sil + " d"}</td></tr>`).join("")}
     </tbody></table>
     <p style="color:var(--muted);font-size:.8rem;margin:10px 0 0">
-    Do top ${D.cfg.topParados} histórico, os que praticamente não editam há
-    ${D.cfg.janela} dias.</p></div>`);
+    Do top ${D.cfg.topParados} histórico, os que fizeram menos de
+    ${D.cfg.paradoMax} edições nos últimos ${D.cfg.janela} dias.</p></div>`);
 
   blocos.push(`<div class="painel"><h2>Ritmo semanal — 90 dias</h2>
     ${barras(p.semana, (v) => NF.format(v))}
@@ -713,8 +730,7 @@ function paineis() {
     ${(() => { const d = D.resumo.deltaFds;
        if (Math.abs(d) < 5) return "Fim de semana e dia útil rendem praticamente o mesmo.";
        return `O fim de semana rende <b>${d > 0 ? "+" : ""}${d}%</b> em relação ao dia
-               útil médio.`; })()}
-    Qual dia exatamente lidera oscila entre coletas.</p></div>`);
+               útil médio.`; })()}</p></div>`);
 
   blocos.push(mapa(p.mapa));
 
@@ -760,6 +776,9 @@ function build() {
    ["fVet", c.vetorDias], ["fMeta", c.meta], ["fMeta2", c.meta],
    ["fAno", c.primeiroAno], ["fMin", c.safraMin]]
     .forEach(([id, v]) => { const el = $(id); if (el) el.textContent = NF.format(v); });
+  const e = D.estat || {};
+  if ($("fGap")) $("fGap").textContent = (e.foraPct || 0) + "%";
+  if ($("fZero")) $("fZero").textContent = (e.semEdicaoPct || 0) + "%";
 
   montaUfs();
   $("q").oninput = render;

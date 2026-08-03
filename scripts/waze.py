@@ -192,8 +192,8 @@ def fetch(opener, url: str, params: dict, referer: str,
 
 # ------------------------------------------------------------------- placar
 
-def coleta_placar(opener, period="ALL_TIME",
-                  quiet=False) -> Tuple[List[dict], List[str]]:
+def coleta_placar(opener, period="ALL_TIME", quiet=False,
+                  stats=None) -> Tuple[List[dict], List[str]]:
     """Varre o ranking nacional e os 27 estaduais.
 
     Os rankings estaduais são mutuamente exclusivos, então a UF de cada editor
@@ -222,6 +222,10 @@ def coleta_placar(opener, period="ALL_TIME",
             for raw in rows:
                 uid = raw.get("userId")
                 edits = int(raw.get("mapEditCount") or 0)
+                if stats is not None:
+                    stats["linhas"] = stats.get("linhas", 0) + 1
+                    if edits <= 0:
+                        stats["semEdicao"] = stats.get("semEdicao", 0) + 1
                 if not uid or edits <= 0:
                     continue
                 cur = editores.setdefault(uid, {
@@ -261,11 +265,15 @@ def universo(opener, quiet=False) -> Tuple[List[dict], List[str]]:
     """
     juntos = {}                      # type: Dict[str, dict]
     falhas = []                      # type: List[str]
+    porperiodo = {}                  # type: Dict[str, set]
+    janelas = {"linhas": 0, "semEdicao": 0}
     for periodo in PERIODS:
         if not quiet:
             print("  varrendo {}…".format(periodo), file=sys.stderr)
-        rows, f = coleta_placar(opener, periodo, quiet=True)
+        st = janelas if periodo != "ALL_TIME" else None
+        rows, f = coleta_placar(opener, periodo, quiet=True, stats=st)
         falhas += f
+        porperiodo[periodo] = {r["username"] for r in rows}
         for r in rows:
             cur = juntos.get(r["username"])
             if cur is None:
@@ -277,7 +285,25 @@ def universo(opener, quiet=False) -> Tuple[List[dict], List[str]]:
                     cur["edits"] = max(cur["edits"], r["edits"])
                 cur["uf"] = cur["uf"] or r["uf"]
                 cur["level"] = cur["level"] or r["level"]
-    return sorted(juntos.values(), key=lambda r: -r["edits"]), falhas
+    # Duas medidas que a página usa para não precisar afirmar nada de cor:
+    # quanto o ranking histórico sozinho deixaria de fora, e que fatia das
+    # linhas dos rankings de janela é de gente que não editou no período.
+    historico = porperiodo.get("ALL_TIME", set())
+    ativos = set()
+    for pp in PERIODS:
+        if pp != "ALL_TIME":
+            ativos |= porperiodo.get(pp, set())
+    faltando = ativos - historico
+    estat = {
+        "ativosJanela": len(ativos),
+        "foraDoHistorico": len(faltando),
+        "foraPct": round(100 * len(faltando) / len(ativos)) if ativos else 0,
+        "linhasJanela": janelas["linhas"],
+        "semEdicaoPct": (round(100 * janelas["semEdicao"] / janelas["linhas"])
+                         if janelas["linhas"] else 0),
+    }
+    ordenado = sorted(juntos.values(), key=lambda r: -r["edits"])
+    return ordenado, falhas, estat
 
 
 # ------------------------------------------------------------------- perfis

@@ -82,7 +82,7 @@ def main() -> None:
     if not args.quiet:
         print("varrendo os rankings (28 por janela, 3 janelas)…", file=sys.stderr)
     try:
-        editores, falhas = waze.universo(opener, quiet=args.quiet)
+        editores, falhas, estat = waze.universo(opener, quiet=args.quiet)
     except waze.SemPermissao as exc:
         sys.exit("{} — sessão expirada. Atualize {}.".format(exc, args.cookies))
     if falhas and not args.allow_partial:
@@ -160,7 +160,7 @@ def main() -> None:
 
     agora = dt.datetime.now().astimezone()
     dados = pagina.prepara(perfis, ufs, agora.strftime("%d/%m/%Y %H:%M %Z").strip(),
-                           areas=areas)
+                           areas=areas, estat=estat)
 
     out = Path(args.out)
     write_atomic(out, pagina.build_html(dados))
