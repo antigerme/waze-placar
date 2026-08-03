@@ -711,13 +711,14 @@ PAGE = r"""<!doctype html>
 
   <div class="kpis" id="kpis"></div>
 
-  <div class="tabs" id="tabs"></div>
+  <div class="tabs" id="tabs" role="tablist" aria-label="Janela de tempo"></div>
   <div class="controls">
     <input id="q" type="search" placeholder="Procurar editor…" autocomplete="off">
     <select id="uf"></select>
   </div>
 
-  <div class="tablewrap">
+  <div class="tablewrap" id="painelTabela" role="tabpanel"
+       aria-label="Classificação dos editores">
     <table>
       <thead><tr>
         <th class="pos" id="thPos">#</th><th id="thEditor">Editor</th>
@@ -1301,6 +1302,7 @@ function build() {
 
   $("tabs").innerHTML = ABAS.filter(([k]) => !so || k === "tot").map(([k, rot]) =>
     `<button class="tab" role="tab" data-k="${k}" aria-selected="${k === aba}"
+       aria-controls="painelTabela"
        title="${AJUDA.janela[k]} ${k === "tot"
          ? "O número ao lado é o universo inteiro que o placar enxerga."
          : "O número ao lado é quantos editores têm ao menos uma edição nessa janela."}">
