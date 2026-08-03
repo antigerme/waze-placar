@@ -130,6 +130,75 @@ if tabs:
     # o terceiro item de cada aba é índice de coluna, não texto
     alvos.append(("dica", re.sub(r",\s*\d+\]", "]", tabs.group(1))))
 
+def _texto_dos_literais(js):
+    """Todo pedaço de texto humano nos literais do JS, inclusive aninhados.
+
+    Regex não serve aqui. O texto que mais interessa mora dentro de ${...} —
+    é o caso do title= dos selos de ritmo, montado por ternário com template
+    literal em cada braço. Uma varredura por regex casa a crase de abertura
+    desse literal interno como se fosse o fechamento do externo, e o texto
+    passa inteiro sem ser conferido. Só um scanner com pilha enxerga isso.
+    """
+    achados = []
+
+    def literal(i):
+        """Consome o literal que começa em js[i]; devolve o índice seguinte."""
+        aspa, j, buf = js[i], i + 1, []
+        while j < len(js):
+            c = js[j]
+            if c == "\\":
+                j += 2
+                continue
+            if c == aspa:
+                break
+            if aspa == "`" and js.startswith("${", j):
+                achados.append("".join(buf))
+                buf = []
+                j = expressao(j + 2)
+                continue
+            buf.append(c)
+            j += 1
+        achados.append("".join(buf))
+        return j + 1
+
+    def expressao(i):
+        """Consome ${...} casando chaves e descendo em literais aninhados."""
+        nivel, j = 1, i
+        while j < len(js) and nivel:
+            c = js[j]
+            if c == "\\":
+                j += 2
+            elif c in "\"'`":
+                j = literal(j)
+            elif c == "{":
+                nivel += 1
+                j += 1
+            elif c == "}":
+                nivel -= 1
+                j += 1
+            else:
+                j += 1
+        return j
+
+    i = 0
+    while i < len(js):
+        if js[i] in "\"'`":
+            i = literal(i)
+        else:
+            i += 1
+    return achados
+
+
+# Rede final: qualquer texto de literal do JS que pareça frase em português.
+# As extrações por contexto acima têm ponto cego; esta é por forma — se tem
+# duas palavras seguidas, é frase, e frase não leva número escrito à mão.
+# Pega inclusive o texto que ainda nem tem contexto definido.
+for _s in _texto_dos_literais(
+        re.sub(r"//[^\n]*", "", sem_css[sem_css.find("<script>"):])):
+    if (re.search(r"[A-Za-zÀ-ÿ]{4,}\s+[a-zà-ÿ]{2,}", _s)
+            and "px" not in _s and "var(" not in _s):
+        alvos.append(("frase", _s))
+
 for origem, txt in alvos:
     achados = _numeros(re.sub(r"\s+", " ", txt).strip())
     if achados:
