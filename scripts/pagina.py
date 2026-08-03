@@ -572,8 +572,6 @@ PAGE = r"""<meta charset="utf-8">
   .name a { color:inherit; text-decoration:none }
   .name a:hover, .name a:focus-visible { color:var(--series);
                                          text-decoration:underline }
-  th[title], .chip[title], .kpi[title], .tab[title], .spark[title],
-  td[title], .barra[title], .painel svg rect { cursor:help }
   .chip { background:var(--chip); border-radius:5px; padding:1px 7px;
           font-size:.75rem; color:var(--muted); font-weight:600 }
   .chip.fraco { background:transparent; color:var(--muted); opacity:.5;
