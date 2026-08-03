@@ -131,6 +131,11 @@ transações que não pagina, o campo `level` que some, os dois backends expiran
 em ritmos diferentes. Cada uma custou uma conclusão errada aqui antes de virar
 uma linha no documento.
 
+[`docs/decisoes.md`](docs/decisoes.md) guarda o resto: os erros que este
+projeto já cometeu e como cada um foi descoberto, os caminhos testados e
+descartados com o motivo, as ordens de grandeza de uma execução saudável — que
+servem de canário — e o que ainda não foi explorado.
+
 `scripts/auditar-layout.mjs` abre a página gerada num navegador em quatro
 larguras e falha se algo rolar lateralmente ou vazar do painel. Precisa de
 `npm i playwright`. Vale rodar depois de mexer no `pagina.py`: validar por
