@@ -455,6 +455,7 @@ def prepara(perfis, ufs, gerado, areas=None, estat=None, extras=None,
             "celulaKm": round(CELULA * 111),
             "vetorDias": 91,
             "safraMin": SAFRA_MIN,
+            "safraMadura": SAFRA_MADURA,
             # o ano em que o editor mais antigo do país começou
             "primeiroAno": min([e["ano"] for e in eds if e["ano"]] or [0]),
             "paradoMax": 100,        # limiar de "praticamente não edita"
@@ -962,11 +963,11 @@ function paineis() {
     }).join("")}
     <p style="color:var(--muted);font-size:.8rem;margin:10px 0 0">
     Barra é quantos entraram no ano; o percentual é quanto dessa safra ainda
-    edita hoje. Entre as safras de ${D.resumo.safraLimite} ou antes — velhas o
-    bastante para já terem perdido quem ia sair — a mediana é
+    edita hoje. Entre as safras de ${D.resumo.safraLimite} ou antes — as que já
+    têm ao menos ${D.cfg.safraMadura} anos — a mediana é
     <b>${D.resumo.retencao}%</b>, variando de ${D.resumo.faixaRetencao[0]}% a
-    ${D.resumo.faixaRetencao[1]}%. As safras recentes aparecem mais altas porque
-    ainda não tiveram tempo de evadir.
+    ${D.resumo.faixaRetencao[1]}%. As mais novas ficam fora dessa conta porque
+    tiveram menos tempo para perder gente, e não porque marquem mais ou menos.
     <span style="opacity:.7">* menos de ${D.cfg.safraMin} pessoas — o percentual
     oscila demais para significar algo.</span></p></div>`);
 
