@@ -5,6 +5,9 @@
 // escondido atrás de barras de rolagem que pareciam intencionais. A checagem
 // que importa é esta — nada pode rolar lateralmente nem vazar do painel.
 //
+// Confere também o que só se vê renderizado: erro de JS no console e ponto
+// decimal em número, que numa página em português é sempre defeito.
+//
 //   npm i playwright
 //   node scripts/auditar-layout.mjs [caminho-do-html]
 //
@@ -55,16 +58,33 @@ for (const largura of LARGURAS) {
         out.vazando.push(el.textContent.trim().slice(0, 30));
       }
     });
+
+    // Decimal com ponto numa página em português. Em pt-BR o ponto é separador
+    // de milhar, então "1.690.773" está certo e "67.2%" está errado: o que
+    // denuncia é o ponto seguido de menos de três dígitos. Já escapou um
+    // "0.5°" e um "67.2%" no KPI, os dois por concatenar float direto.
+    out.decimais = [];
+    const anda = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let n = anda.nextNode(); n; n = anda.nextNode()) {
+      if (n.parentElement.closest('script, style')) continue;
+      const m = n.nodeValue.match(/\d\.\d{1,2}(?!\d)/g);
+      if (m) out.decimais.push(...m);
+    }
     return out;
   });
 
-  const ok = !r.overflowPagina && !r.rolagem.length && !r.vazando.length && !erros.length;
+  const ok = !r.overflowPagina && !r.rolagem.length && !r.vazando.length &&
+             !r.decimais.length && !erros.length;
   if (!ok) problemas++;
   console.log(largura + 'px  ' + (ok ? 'ok' : 'PROBLEMA'));
   if (r.overflowPagina) console.log('   página rola lateralmente');
   if (r.rolagem.length) console.log('   com rolagem:', [...new Set(r.rolagem)].join(', '));
   if (r.vazando.length) {
     console.log('   vazando do painel:', [...new Set(r.vazando)].slice(0, 6).join(' | '));
+  }
+  if (r.decimais.length) {
+    console.log('   ponto decimal em página pt-BR:',
+      [...new Set(r.decimais)].slice(0, 6).join(' | '));
   }
   if (erros.length) console.log('   erros JS:', erros.slice(0, 3).join(' | '));
 

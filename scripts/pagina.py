@@ -1102,9 +1102,9 @@ function paineis() {
     situação.</p></div>`);
 
   blocos.push(`<div class="painel"><h2>Concentração</h2>
-    ${barras(p.concentracao.map(([n, pc]) => ["top " + n, pc]), (v) => v + "%",
+    ${barras(p.concentracao.map(([n, pc]) => ["top " + n, pc]), (v) => NF.format(v) + "%",
       (k, v) => "Os " + k.replace("top ", "") + " editores mais produtivos dos últimos " +
-                D.cfg.janela + " dias somam " + v + "% de tudo que foi editado no país.")}
+                D.cfg.janela + " dias somam " + NF.format(v) + "% de tudo que foi editado no país.")}
     <p style="color:var(--muted);font-size:.8rem;margin:10px 0 0">
     Fatia das edições dos últimos ${D.cfg.janela} dias.</p></div>`);
 
@@ -1295,7 +1295,7 @@ function build() {
   ] : [
     [NF.format(r.ativos30), `editores ativos nos últimos ${C.janelaMedia} dias`, AJUDA.kpi.ativos],
     [NF.format(r.edicoes90), `edições em ${C.janela} dias`, AJUDA.kpi.edicoes],
-    [r.concKpi + "%", `das edições vêm de ${C.concKpiN} pessoas`, AJUDA.kpi.conc],
+    [NF.format(r.concKpi) + "%", `das edições vêm de ${C.concKpiN} pessoas`, AJUDA.kpi.conc],
     [NF.format(r.fator1), "estados dependem de um único editor", AJUDA.kpi.fator1],
   ]).map(([v, k, aj]) =>
     `<div class="kpi" title="${aj}"><b>${v}</b><span>${k}</span></div>`).join("");
