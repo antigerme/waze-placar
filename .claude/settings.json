@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"${CLAUDE_PROJECT_DIR:-.}\" && out=$(python3 scripts/verificar.py 2>&1) || { echo \"$out\"; exit 2; }",
+            "timeout": 30,
+            "statusMessage": "Conferindo se a documentação bate com o código"
+          }
+        ]
+      }
+    ]
+  }
+}

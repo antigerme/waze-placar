@@ -41,6 +41,17 @@ entra em dataset ou na página.
 **Não aumente o ritmo das requisições.** O throttle com jitter em ~1,25 req/s é
 deliberado. O teto do Waze nunca foi testado, de propósito.
 
+## A verificação é automática
+
+`scripts/verificar.py` roda sozinho ao fim de cada resposta, por um hook em
+`.claude/settings.json`. Ele falha e devolve o motivo quando a documentação
+descola do código: flag citada no README que não existe mais, endpoint novo sem
+entrada em `docs/api-recon.md`, número literal na prosa da página, ou seção
+perdida do `docs/decisoes.md`.
+
+Se ele reclamar, **atualize o documento** — não relaxe a checagem. Cada uma
+delas existe porque a coisa correspondente já desatualizou sem ninguém notar.
+
 ## Ao coletar
 
 Uma execução completa leva ~40 min e faz ~3.300 requisições. Para iterar sem
