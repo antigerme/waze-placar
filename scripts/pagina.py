@@ -572,6 +572,8 @@ PAGE = r"""<meta charset="utf-8">
   .name a { color:inherit; text-decoration:none }
   .name a:hover, .name a:focus-visible { color:var(--series);
                                          text-decoration:underline }
+  th[title], .chip[title], .kpi[title], .tab[title], .spark[title],
+  td[title], .barra[title], .painel svg rect { cursor:help }
   .chip { background:var(--chip); border-radius:5px; padding:1px 7px;
           font-size:.75rem; color:var(--muted); font-weight:600 }
   .chip.fraco { background:transparent; color:var(--muted); opacity:.5;
@@ -644,11 +646,12 @@ PAGE = r"""<meta charset="utf-8">
   <div class="tablewrap">
     <table>
       <thead><tr>
-        <th class="pos">#</th><th>Editor</th>
+        <th class="pos" id="thPos">#</th><th id="thEditor">Editor</th>
         <th class="num" id="thJanela">Edições</th>
-        <th class="c-spark">90 dias</th>
-        <th class="num c-seq">Seq.</th><th class="num c-tend">Tend.</th>
-        <th class="num c-hist">Histórico</th>
+        <th class="c-spark" id="thSpark">90 dias</th>
+        <th class="num c-seq" id="thSeq">Seq.</th>
+        <th class="num c-tend" id="thTend">Tend.</th>
+        <th class="num c-hist" id="thHist">Histórico</th>
       </tr></thead>
       <tbody id="body"></tbody>
     </table>
@@ -690,6 +693,31 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ESC[c]);
 const perfil = (u) => "https://www.waze.com/user/editor/" + encodeURIComponent(u);
 const $ = (id) => document.getElementById(id);
 
+// Toda a ajuda de hover num lugar só, para poder ser lida e revisada de uma vez.
+const AJUDA = {
+  pos: "Posição nesta aba. Como cada aba ordena por uma janela diferente, a mesma pessoa aparece em posições diferentes.",
+  editor: "Nome no Waze. Clique para abrir o perfil. Logo abaixo vêm o estado, o nível e os selos.",
+  janela: {
+    d30: "Edições feitas nos últimos 30 dias fechados.",
+    d7: "Edições feitas nos últimos 7 dias fechados.",
+    d90: "Edições feitas nos últimos 90 dias fechados.",
+    tot: "Total de edições desde a primeira, em toda a carreira.",
+  },
+  janelaExtra: " Vem do histórico diário do perfil; o dia de hoje, que ainda está correndo, fica de fora da soma.",
+  faisca: "Formato da atividade nos últimos 90 dias, em 15 blocos de 6 dias, do mais antigo ao mais recente. A altura é relativa ao melhor bloco da própria pessoa — serve para ver o ritmo dela, não para comparar com outra.",
+  seq: "Dias seguidos com pelo menos uma edição, contados de trás para frente. Hoje não entra, porque o dia ainda não fechou.",
+  tend: "Compara o total dos últimos 45 dias com o dos 45 anteriores. Fica em branco para quem editou pouco no período, onde a razão diria mais sobre o acaso que sobre a pessoa.",
+  tot: "Total de edições da carreira inteira. Não muda conforme a aba escolhida.",
+  uf: "Estado do editor, deduzido de qual ranking estadual ele aparece. Os rankings estaduais não se sobrepõem.",
+  nivel: "Nível de editor no Waze, de 1 a 6. Sobe com experiência e dá mais permissões no editor de mapas.",
+  kpi: {
+    ativos: "Quantas pessoas fizeram ao menos uma edição nos últimos 30 dias. O total do histórico é muito maior porque inclui quem editou uma vez, anos atrás, e nunca voltou.",
+    edicoes: "Soma de todas as edições feitas no Brasil nos últimos 90 dias, por todos os editores que o placar acompanha.",
+    conc: "Fatia das edições dos últimos 90 dias que vem dos 50 editores mais produtivos. Quanto mais alto, mais o mapa depende de pouca gente.",
+    fator1: "Estados em que um único editor responde por mais da metade das edições. Se essa pessoa parar, o estado perde metade do ritmo.",
+  },
+};
+
 const ABAS = [
   ["d30", "30 dias", 5], ["d7", "7 dias", 4],
   ["d90", "90 dias", 6], ["tot", "Histórico", 3],
@@ -723,24 +751,37 @@ function selos(e) {
   const s = [];
   // 4 em 5 editores são de segmento: esmaece o comum para os outros saltarem.
   if (e[11]) s.push(`<span class="chip${e[11] === D.tipoComum[aba] ? " fraco" : ""}"
-    title="Tipo de edição que domina o trabalho histórico">${esc(e[11])}</span>`);
+    title="Especialidade: ${esc(e[11])} é o tipo de edição que mais fez na carreira. Sai esmaecido quando é o tipo mais comum entre os editores desta aba."
+    >${esc(e[11])}</span>`);
   if (e[12]) s.push(`<span class="chip"
-    title="${e[12] === "constante" ? "Edita quase todo dia, sem picos"
-                                   : "Concentra o trabalho em poucos dias"}"
+    title="${e[12] === "constante"
+      ? "Ritmo constante: editou em 60 ou mais dos últimos 90 dias, e nenhum dia isolado passa de 10% do total. É quem aparece todo dia."
+      : "Ritmo explosivo: um único dia responde por 25% ou mais de tudo que fez em 90 dias. É quem trabalha em mutirão."}"
     >${e[12]}</span>`);
   if (e[10]) s.push(`<span class="chip"
-    title="${e[10]} editor(es) apadrinhado(s)">mentor</span>`);
+    title="Mentor de ${e[10]} editor(es) novo(s) no Waze."
+    >mentor</span>`);
   if (e[13]) s.push(`<span class="chip"
-    title="${e[13]} área(s) gerenciada(s)">AM</span>`);
+    title="Area Manager: tem responsabilidade formal sobre ${e[13]} área(s) do mapa."
+    >AM</span>`);
   return s.join(" ");
 }
 
 function tend(t) {
-  if (t === null || t === undefined) return '<span class="flat">—</span>';
-  if (t >= 999) return '<span class="up">↑ novo</span>';
-  if (t > 10) return `<span class="up">↑ ${t}%</span>`;
-  if (t < -10) return `<span class="down">↓ ${Math.abs(t)}%</span>`;
-  return '<span class="flat">→</span>';
+  const cap = (txt) => ' title="' + txt + '"';
+  if (t === null || t === undefined) {
+    return '<span class="flat"' + cap("Editou pouco demais no período para a comparação significar algo.") + ">—</span>";
+  }
+  if (t >= 999) {
+    return '<span class="up"' + cap("Não tinha nenhuma atividade nos primeiros 45 dias da janela: começou ou voltou a editar na segunda metade.") + ">↑ novo</span>";
+  }
+  if (t > 10) {
+    return '<span class="up"' + cap("Fez " + t + "% mais edições nos últimos 45 dias do que nos 45 anteriores.") + ">↑ " + t + "%</span>";
+  }
+  if (t < -10) {
+    return '<span class="down"' + cap("Fez " + Math.abs(t) + "% menos edições nos últimos 45 dias do que nos 45 anteriores.") + ">↓ " + Math.abs(t) + "%</span>";
+  }
+  return '<span class="flat"' + cap("Ritmo estável: a variação entre as duas metades da janela ficou dentro de 10%.") + ">→</span>";
 }
 
 function render() {
@@ -751,26 +792,32 @@ function render() {
       <td class="name"><a href="${esc(perfil(e[0]))}" target="_blank"
          rel="noopener noreferrer" title="Ver perfil de ${esc(e[0])} no Waze"
          >${esc(e[0])}</a>
-        <span class="selos"><span class="chip">${e[1] || "--"}</span>${
-          e[2] ? `<span class="chip">N${e[2]}</span>` : ""}${selos(e)}</span></td>
+        <span class="selos"><span class="chip" title="${AJUDA.uf}"
+          >${e[1] || "--"}</span>${e[2]
+          ? `<span class="chip" title="${AJUDA.nivel}">N${e[2]}</span>` : ""
+          }${selos(e)}</span></td>
       <td class="num">${NF.format(e[c])}</td>
       <td class="c-spark">${faisca(e[9])}</td>
-      <td class="num c-seq">${e[7] || ""}</td>
+      <td class="num c-seq" title="${e[7] ? e[7] + " dia(s) seguidos editando" : "Não está numa sequência"}">${e[7] || ""}</td>
       <td class="num c-tend">${tend(e[8])}</td>
-      <td class="num c-hist">${NF.format(e[3])}</td>
+      <td class="num c-hist" title="${NF.format(e[3])} edições desde a primeira">${NF.format(e[3])}</td>
     </tr>`).join("");
   $("empty").hidden = lista.length > 0;
   $("thJanela").textContent =
     aba === "tot" ? "Edições" : "Edições (" + ABAS.find((a) => a[0] === aba)[1] + ")";
+  $("thJanela").title = AJUDA.janela[aba] + (aba === "tot" ? "" : AJUDA.janelaExtra);
 }
 
-function barras(itens, fmt) {
+function barras(itens, fmt, ajuda) {
   const max = Math.max(...itens.map((i) => i[1])) || 1;
-  return itens.map(([k, v]) => `<div class="barra">
+  return itens.map(([k, v]) => {
+    const t = ajuda ? ' title="' + esc(ajuda(k, v)) + '"' : "";
+    return `<div class="barra"${t}>
       <span>${esc(k)}</span>
       <span class="t"><span class="f" style="width:${Math.max(1, (v / max) * 100)}%;display:block"></span></span>
       <span class="v">${fmt(v)}</span>
-    </div>`).join("");
+    </div>`;
+  }).join("");
 }
 
 function link(u) {
@@ -867,13 +914,17 @@ function cidadesEtipos(a) {
     Venue: "local", Node: "nó", PermanentHazard: "alerta fixo",
     Street: "via", HouseNumber: "numeração", RoadClosure: "bloqueio" };
   return `<div class="painel"><h2>Cidades com mais edições recentes</h2>
-    ${barras(a.cidades.map(([c, n]) => [c, n]), (v) => NF.format(v))}
+    ${barras(a.cidades.map(([c, n]) => [c, n]), (v) => NF.format(v),
+      (k, v) => v + " das edições recentes coletadas caíram em " + k + ".")}
     <p style="color:var(--muted);font-size:.8rem;margin:10px 0 0">
     O Waze só nomeia a cidade em ${Math.round(100 * a.comCidade / a.edicoes)}% das
     edições; as demais entram no mapa mas não nesta lista.</p></div>
     <div class="painel"><h2>O que está sendo mexido agora</h2>
     ${barras(a.tipos.slice(0, 8).map(([k, v]) => [ROT[k] || k, v]),
-             (v) => Math.round(100 * v / totTipos) + "%")}
+             (v) => Math.round(100 * v / totTipos) + "%",
+             (k, v) => NF.format(v) + " operações do tipo " + k +
+                       ", que é " + Math.round(100 * v / totTipos) +
+                       "% de tudo que foi tocado nas edições recentes.")}
     <p style="color:var(--muted);font-size:.8rem;margin:10px 0 0">
     Operações das edições recentes, por tipo de objeto tocado. É o trabalho dos
     últimos dias, não o acumulado de carreira que aparece nos selos da
@@ -926,14 +977,20 @@ function paineis() {
   const blocos = [];
 
   blocos.push(`<div class="painel largo"><h2>Estados — quem seguraria a queda</h2>
-    <table><thead><tr><th>UF</th><th class="num">Edições</th>
-    <th class="num">Ativos</th><th class="num">Fator</th>
-    <th>Maior editor</th></tr></thead><tbody>
+    <table><thead><tr>
+    <th title="Sigla do estado, deduzida de qual ranking estadual os editores aparecem.">UF</th>
+    <th class="num" title="Total de edições feitas no estado nos últimos ${D.cfg.janela} dias.">Edições</th>
+    <th class="num c-ativos" title="Editores do estado com ao menos uma edição nos últimos ${D.cfg.janela} dias.">Ativos</th>
+    <th class="num" title="Fator de ônibus: quantos editores precisariam parar para o estado perder metade das edições. Fator 1 é o pior caso — uma só pessoa segura mais da metade.">Fator</th>
+    <th title="Quem mais produziu no estado, e a fatia do total que veio dessa pessoa.">Maior editor</th>
+    </tr></thead><tbody>
     ${p.estados.slice(0, 14).map(([uf, ed, n, fator, topo, pct]) => `<tr>
        <td><span class="chip">${uf}</span></td>
-       <td class="num">${NF.format(ed)}</td>
+       <td class="num" title="${NF.format(ed)} edições em ${D.cfg.janela} dias, de ${n} editor(es) ativo(s)">${NF.format(ed)}</td>
        <td class="num c-ativos">${n}</td>
-       <td class="num ${fator === 1 ? "down" : ""}">${fator}</td>
+       <td class="num ${fator === 1 ? "down" : ""}" title="${fator === 1
+         ? "Fator 1: " + topo + " sozinho responde por " + pct + "% das edições de " + uf + "."
+         : "Precisam parar " + fator + " editores para " + uf + " perder metade das edições."}">${fator}</td>
        <td class="quebra">${link(topo)}
          <span style="color:var(--muted)">${pct}%</span></td>
       </tr>`).join("")}
@@ -945,7 +1002,9 @@ function paineis() {
     situação.</p></div>`);
 
   blocos.push(`<div class="painel"><h2>Concentração — quem sustenta o mapa</h2>
-    ${barras(p.concentracao.map(([n, pc]) => ["top " + n, pc]), (v) => v + "%")}
+    ${barras(p.concentracao.map(([n, pc]) => ["top " + n, pc]), (v) => v + "%",
+      (k, v) => "Os " + k.replace("top ", "") + " editores mais produtivos dos últimos " +
+                D.cfg.janela + " dias somam " + v + "% de tudo que foi editado no país.")}
     <p style="color:var(--muted);font-size:.8rem;margin:10px 0 0">
     Fatia das edições dos últimos ${D.cfg.janela} dias.</p></div>`);
 
@@ -954,10 +1013,10 @@ function paineis() {
       const max = Math.max(...p.entrada.map((r) => r[1])) || 1;
       const pct = n ? Math.round(100 * viv / n) : 0;
       const poucos = n < D.cfg.safraMin;
-      return `<div class="barra">
+      return `<div class="barra" title="${n} pessoa(s) fizeram a primeira edição em ${ano}; ${viv} (${pct}%) ainda editaram nos últimos ${D.cfg.janela} dias.${poucos ? " Safra pequena demais para o percentual significar muito." : ""}">
         <span>${ano}</span>
         <span class="t"><span class="f" style="width:${Math.max(1, (n / max) * 100)}%;display:block"></span></span>
-        <span class="v" title="${viv} de ${n} ainda editam">${n}
+        <span class="v" title="${n} pessoa(s) fizeram a primeira edição em ${ano}; ${viv} delas ainda editaram nos últimos ${D.cfg.janela} dias.">${n}
           <span style="opacity:${poucos ? .4 : .8}">· ${pct}%${poucos ? "*" : ""}</span></span>
       </div>`;
     }).join("")}
@@ -972,12 +1031,15 @@ function paineis() {
     oscila demais para significar algo.</span></p></div>`);
 
   blocos.push(`<div class="painel"><h2>Vigília — produziam e emudeceram</h2>
-    ${p.evasao.length ? `<table><thead><tr><th>Editor</th>
-    <th class="num">Antes</th><th class="num">Calado</th></tr></thead><tbody>
+    ${p.evasao.length ? `<table><thead><tr>
+    <th title="Editor que produzia no começo da janela e parou.">Editor</th>
+    <th class="num" title="Edições feitas nos primeiros ${D.cfg.meta} dias da janela — o que a pessoa estava produzindo antes de sumir.">Antes</th>
+    <th class="num" title="Dias desde a última edição. Só entra na lista quem está em silêncio há ${D.cfg.evasaoDias} dias ou mais.">Calado</th>
+    </tr></thead><tbody>
     ${p.evasao.map(([u, uf, prim, sil]) => `<tr>
        <td>${link(u)} <span class="chip">${uf || "--"}</span></td>
        <td class="num">${NF.format(prim)}</td>
-       <td class="num down">${sil} d</td></tr>`).join("")}
+       <td class="num down" title="Última edição há ${sil} dias.">${sil} d</td></tr>`).join("")}
     </tbody></table>` : `<p style="color:var(--muted)">Ninguém nessa situação.</p>`}
     <p style="color:var(--muted);font-size:.8rem;margin:10px 0 0">
     Editaram nos primeiros ${D.cfg.meta} dias da janela e estão em silêncio há
@@ -985,20 +1047,28 @@ function paineis() {
     editor parado que voltou a produzir.</p></div>`);
 
   blocos.push(`<div class="painel"><h2>Gigantes parados</h2>
-    <table><thead><tr><th>Editor</th><th class="num">Total</th>
-    <th class="num">Parado</th></tr></thead><tbody>
+    <table><thead><tr>
+    <th title="Posição no ranking histórico e nome do editor.">Editor</th>
+    <th class="num" title="Total de edições da carreira. São nomes grandes do mapa brasileiro.">Total</th>
+    <th class="num" title="Dias desde a última edição. '${D.cfg.janela}+ d' significa que não editou nenhuma vez em toda a janela.">Parado</th>
+    </tr></thead><tbody>
     ${p.parados.map(([u, uf, tot, d90, pos, sil]) => `<tr>
         <td><span style="color:var(--muted)">${pos}.</span> ${link(u)}
             <span class="chip">${uf || "--"}</span></td>
         <td class="num">${NF.format(tot)}</td>
-        <td class="num">${sil === null ? "90+ d" : sil + " d"}</td></tr>`).join("")}
+        <td class="num" title="${sil === null
+          ? "Nenhuma edição em toda a janela de " + D.cfg.janela + " dias."
+          : "Última edição há " + sil + " dias."}">${sil === null
+          ? D.cfg.janela + "+ d" : sil + " d"}</td></tr>`).join("")}
     </tbody></table>
     <p style="color:var(--muted);font-size:.8rem;margin:10px 0 0">
     Do top ${D.cfg.topParados} histórico, os que fizeram menos de
     ${D.cfg.paradoMax} edições nos últimos ${D.cfg.janela} dias.</p></div>`);
 
   blocos.push(`<div class="painel"><h2>Ritmo semanal — ${D.cfg.janela} dias</h2>
-    ${barras(p.semana, (v) => NF.format(v))}
+    ${barras(p.semana, (v) => NF.format(v),
+      (k, v) => NF.format(v) + " edições caíram numa " + k + " ao longo dos últimos " +
+                D.cfg.janela + " dias, somando todas as pessoas.")}
     <p style="color:var(--muted);font-size:.8rem;margin:10px 0 0">
     ${(() => { const d = D.resumo.deltaFds;
        if (Math.abs(d) < 5) return "Fim de semana e dia útil rendem praticamente o mesmo.";
@@ -1008,10 +1078,10 @@ function paineis() {
   blocos.push(`<div class="painel"><h2>Nível e atividade</h2>
     ${p.niveis.map(([lv, n, viv]) => {
       const max = Math.max(...p.niveis.map((r) => r[1])) || 1;
-      return `<div class="barra">
+      return `<div class="barra" title="Nível ${lv}: ${NF.format(n)} editores nesse nível, ${viv} deles ativos nos últimos ${D.cfg.janela} dias (${Math.round(100*viv/n)}%).">
         <span>N${lv}</span>
         <span class="t"><span class="f" style="width:${Math.max(1,(n/max)*100)}%;display:block"></span></span>
-        <span class="v" title="${viv} de ${n} editaram nos últimos ${D.cfg.janela} dias"
+        <span class="v" title="Nível ${lv}: existem ${NF.format(n)} editores nesse nível e ${viv} deles editaram nos últimos ${D.cfg.janela} dias."
           >${NF.format(n)} <span style="opacity:.8">· ${Math.round(100*viv/n)}%</span></span>
       </div>`;
     }).join("")}
@@ -1020,12 +1090,14 @@ function paineis() {
     editou nos últimos ${D.cfg.janela} dias.</p></div>`);
 
   blocos.push(`<div class="painel"><h2>Chegaram na janela</h2>
-    ${p.novatos.length ? `<table><thead><tr><th>Editor</th>
-    <th class="num">Desde</th><th class="num">${D.cfg.janela} d</th>
+    ${p.novatos.length ? `<table><thead><tr>
+    <th title="Quem fez a primeira edição da vida dentro da janela. O selo 'parou' marca quem não editou nas duas últimas semanas.">Editor</th>
+    <th class="num" title="Data da primeiríssima edição da pessoa no Waze.">Desde</th>
+    <th class="num" title="Quanto essa pessoa já produziu desde que começou, dentro da janela.">${D.cfg.janela} d</th>
     </tr></thead><tbody>
     ${p.novatos.map(([u, uf, desde, ed, vivo]) => `<tr>
       <td>${link(u)} <span class="chip">${uf || "--"}</span>${
-        vivo ? "" : ' <span class="chip">parou</span>'}</td>
+        vivo ? "" : ' <span class="chip" title="Não editou nas duas últimas semanas.">parou</span>'}</td>
       <td class="num">${desde.slice(8,10)}/${desde.slice(5,7)}</td>
       <td class="num">${NF.format(ed)}</td></tr>`).join("")}
     </tbody></table>` : `<p style="color:var(--muted)">Ninguém estreou na janela.</p>`}
@@ -1036,10 +1108,10 @@ function paineis() {
 
   const mt = p.mentoria;
   blocos.push(`<div class="painel"><h2>Mentoria</h2>
-    ${mt.rastreados ? `<div class="barra"><span>apadr.</span>
+    ${mt.rastreados ? `<div class="barra" title="Dos ${NF.format(mt.rastreados)} editores que aparecem como afilhados de alguém, ${mt.pctApad}% editaram nos últimos ${D.cfg.janela} dias."><span>apadr.</span>
        <span class="t"><span class="f" style="width:${mt.pctApad}%;display:block"></span></span>
        <span class="v">${mt.pctApad}%</span></div>
-     <div class="barra"><span>demais</span>
+     <div class="barra" title="Entre todos os outros editores do placar, ${mt.pctResto}% editaram nos últimos ${D.cfg.janela} dias. É a taxa de base para comparar."><span>demais</span>
        <span class="t"><span class="f" style="width:${mt.pctResto}%;display:block"></span></span>
        <span class="v">${mt.pctResto}%</span></div>
      <p style="color:var(--muted);font-size:.8rem;margin:8px 0 12px">
@@ -1047,8 +1119,11 @@ function paineis() {
      ${NF.format(mt.rastreados)} apadrinhados e entre os demais editores. Os
      dois lado a lado não mostram que apadrinhar faz ficar: quem procura mentor
      provavelmente já é quem tenderia a continuar.</p>
-     <table><thead><tr><th>Mentor</th><th class="num">Afilh.</th>
-     <th class="num">Ativos</th></tr></thead><tbody>
+     <table><thead><tr>
+     <th title="Editor que apadrinha novatos no Waze.">Mentor</th>
+     <th class="num" title="Quantos afilhados o Waze registra para essa pessoa.">Afilh.</th>
+     <th class="num" title="Quantos desses afilhados editaram nos últimos ${D.cfg.janela} dias.">Ativos</th>
+     </tr></thead><tbody>
      ${mt.top.map(([u, uf, n, lst, viv]) => `<tr>
         <td>${link(u)} <span class="chip">${uf || "--"}</span></td>
         <td class="num">${n}${n > lst ? "*" : ""}</td>
@@ -1064,11 +1139,13 @@ function paineis() {
 
   if (p.forasteiros.length) {
     blocos.push(`<div class="painel"><h2>Cuidam de longe</h2>
-      <table><thead><tr><th>Editor</th><th class="num">Distância</th>
+      <table><thead><tr>
+      <th title="Editor cujas áreas gerenciadas ficam longe das áreas dos colegas do mesmo estado.">Editor</th>
+      <th class="num" title="Distância entre o centro das áreas dessa pessoa e o centro das áreas dos demais editores do estado dela. Áreas fora do Brasil não entram no cálculo.">Distância</th>
       </tr></thead><tbody>
       ${p.forasteiros.map(([u, uf, km]) => `<tr>
         <td>${link(u)} <span class="chip">${uf}</span></td>
-        <td class="num">${NF.format(km)} km</td></tr>`).join("")}
+        <td class="num" title="As áreas de ${esc(u)} ficam a cerca de ${NF.format(km)} km do centro das áreas dos outros editores de ${uf}.">${NF.format(km)} km</td></tr>`).join("")}
       </tbody></table>
       <p style="color:var(--muted);font-size:.8rem;margin:10px 0 0">
       Distância entre o centro das áreas que a pessoa gerencia dentro do Brasil
@@ -1099,14 +1176,16 @@ function build() {
     + ` · gerado em ${D.gerado}`;
 
   $("kpis").innerHTML = [
-    [NF.format(r.ativos30), "editores ativos nos últimos 30 dias"],
-    [NF.format(r.edicoes90), "edições em 90 dias"],
-    [r.top50 + "%", "das edições vêm de 50 pessoas"],
-    [NF.format(r.fator1), "estados dependem de um único editor"],
-  ].map(([v, k]) => `<div class="kpi"><b>${v}</b><span>${k}</span></div>`).join("");
+    [NF.format(r.ativos30), "editores ativos nos últimos 30 dias", AJUDA.kpi.ativos],
+    [NF.format(r.edicoes90), "edições em 90 dias", AJUDA.kpi.edicoes],
+    [r.top50 + "%", "das edições vêm de 50 pessoas", AJUDA.kpi.conc],
+    [NF.format(r.fator1), "estados dependem de um único editor", AJUDA.kpi.fator1],
+  ].map(([v, k, aj]) =>
+    `<div class="kpi" title="${aj}"><b>${v}</b><span>${k}</span></div>`).join("");
 
   $("tabs").innerHTML = ABAS.map(([k, rot]) =>
-    `<button class="tab" role="tab" data-k="${k}" aria-selected="${k === aba}">
+    `<button class="tab" role="tab" data-k="${k}" aria-selected="${k === aba}"
+       title="${AJUDA.janela[k]} O número ao lado é quantos editores têm ao menos uma edição nessa janela.">
        ${rot} <span style="opacity:.65">${NF.format(D.abas[k].length)}</span>
      </button>`).join("");
   $("tabs").onclick = (e) => {
@@ -1118,6 +1197,10 @@ function build() {
     montaUfs();
     render();
   };
+  [["thPos", AJUDA.pos], ["thEditor", AJUDA.editor], ["thSpark", AJUDA.faisca],
+   ["thSeq", AJUDA.seq], ["thTend", AJUDA.tend], ["thHist", AJUDA.tot]]
+    .forEach(([id, t]) => { const el = $(id); if (el) el.title = t; });
+
   const c = D.cfg;
   [["fRank", c.rankings], ["fUf", c.ufs], ["fCap", c.cap], ["fCap2", c.cap],
    ["fVet", c.vetorDias], ["fMeta", c.meta], ["fMeta2", c.meta],
