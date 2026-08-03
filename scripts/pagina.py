@@ -154,12 +154,14 @@ def _grade_cobertura(areas, ufs):
     }
 
 
-def prepara(perfis, ufs, gerado, areas=None, estat=None, extras=None):
+def prepara(perfis, ufs, gerado, areas=None, estat=None, extras=None,
+            transacoes=None):
     """Transforma os perfis crus na carga que a página consome."""
     areas = areas or {}
     estat = estat or {}
     # Perfis buscados só para a mentoria; não entram no placar nem nas abas.
     extras = extras or {}
+    transacoes = transacoes or []
     eds = []
     for p in perfis:
         act = (p.get("activity") or [])
@@ -389,6 +391,48 @@ def prepara(perfis, ufs, gerado, areas=None, estat=None, extras=None):
                 forasteiros.append([u, uf, km])
     forasteiros.sort(key=lambda r: -r[2])
 
+    # --- onde as edições recentes aconteceram --------------------------------
+    nx = int((MAPA_LON[1] - MAPA_LON[0]) / CELULA)
+    ny = int((MAPA_LAT[1] - MAPA_LAT[0]) / CELULA)
+    celtx = {}
+    fora_br = 0
+    cidades = Counter()
+    tipos_tx = Counter()
+    dias_tx = []
+    # As "dez últimas" de quem edita pouco podem ser de anos atrás — medido, há
+    # transação de 3.927 dias. Num painel sobre onde se edita agora, isso
+    # mancharia o mapa com trabalho de 2015; fora da janela, fora da conta.
+    antigas = sum(1 for t in transacoes if (t.get("dias") or 0) > JANELA)
+    for t in transacoes:
+        if (t.get("dias") or 0) > JANELA:
+            continue
+        x, y = t["lon"], t["lat"]
+        if t.get("cidade"):
+            cidades[t["cidade"]] += 1
+        for k, v in (t.get("tipos") or {}).items():
+            tipos_tx[k] += v
+        if t.get("dias") is not None:
+            dias_tx.append(t["dias"])
+        if not (MAPA_LON[0] <= x <= MAPA_LON[1] and MAPA_LAT[0] <= y <= MAPA_LAT[1]):
+            fora_br += 1
+            continue
+        i = min(nx - 1, int((x - MAPA_LON[0]) / CELULA))
+        j = min(ny - 1, int((y - MAPA_LAT[0]) / CELULA))
+        celtx[(i, j)] = celtx.get((i, j), 0) + 1
+    recentes = [t for t in transacoes if (t.get("dias") or 0) <= JANELA]
+    atividade = {
+        "nx": nx, "ny": ny,
+        "celulas": sorted([i, j, n] for (i, j), n in celtx.items()),
+        "edicoes": len(recentes),
+        "descartadas": antigas,
+        "editores": len({t["username"] for t in recentes}),
+        "fora": fora_br,
+        "comCidade": sum(1 for t in recentes if t.get("cidade")),
+        "cidades": cidades.most_common(12),
+        "tipos": tipos_tx.most_common(),
+        "diasMax": max(dias_tx) if dias_tx else 0,
+    }
+
     ativos30 = len(abas["d30"])
     return {
         "gerado": gerado,
@@ -445,6 +489,7 @@ def prepara(perfis, ufs, gerado, areas=None, estat=None, extras=None):
             "calInicio": d0.weekday(),
             "calMediana": mediana,
             "mentoria": mentoria,
+            "atividade": atividade,
             "forasteiros": forasteiros[:8],
             "mapa": _grade_cobertura(areas, ufs),
         },
@@ -775,6 +820,63 @@ function calendario(p) {
     </p></div>`;
 }
 
+// Mesma projeção e mesmo passo do mapa de cobertura, de propósito: um diz onde
+// alguém tem responsabilidade formal, o outro onde a mão encostou de verdade.
+function mapaAtividade(a) {
+  if (!a.celulas.length) return "";
+  const FAIXAS = [[8, 1, "8 ou mais"], [4, .74, "4 a 7"],
+                  [2, .5, "2 a 3"], [1, .28, "1"]];
+  const cor = (n) => (FAIXAS.find((f) => n >= f[0]) || FAIXAS[3])[1];
+  const cells = a.celulas.map(([i, j, n]) =>
+    `<rect x="${i}" y="${a.ny - 1 - j}" width="1" height="1"
+       fill="var(--series)" fill-opacity="${cor(n)}"><title>${n} edição(ões)</title></rect>`
+  ).join("");
+  let grade = "";
+  for (let g = 10; g < a.nx; g += 20)
+    grade += `<line x1="${g}" y1="0" x2="${g}" y2="${a.ny}" stroke="var(--grid)" stroke-width=".35"/>`;
+  for (let g = 10; g < a.ny; g += 20)
+    grade += `<line x1="0" y1="${g}" x2="${a.nx}" y2="${g}" stroke="var(--grid)" stroke-width=".35"/>`;
+  const legenda = FAIXAS.slice().reverse().map(([n, o, rot]) =>
+    `<span style="display:inline-flex;align-items:center;gap:5px;margin-right:12px">
+       <span style="width:12px;height:12px;border-radius:3px;background:var(--series);
+                    opacity:${o};display:inline-block"></span>${rot}</span>`).join("");
+
+  return `<div class="painel largo"><h2>Onde o mapa está sendo editado</h2>
+    <svg viewBox="0 0 ${a.nx} ${a.ny}" style="width:100%;max-width:520px;height:auto;
+         display:block;margin:0 auto" shape-rendering="crispEdges" role="img"
+         aria-label="Mapa das edições mais recentes no Brasil">${grade}${cells}</svg>
+    <p style="margin:12px 0 0;font-size:.8rem;color:var(--muted)">${legenda}</p>
+    <p style="color:var(--muted);font-size:.8rem;margin:8px 0 0">
+      As <b>${NF.format(a.edicoes)}</b> edições mais recentes de
+      ${NF.format(a.editores)} editores — a API devolve as dez últimas de cada
+      um, e ficam só as dos últimos ${D.cfg.janela} dias.${a.descartadas
+        ? ` Outras ${NF.format(a.descartadas)} eram mais antigas que isso e
+            saíram da conta.` : ""}
+      Mesma grade do mapa de cobertura, para comparar: lá é onde há gerente,
+      aqui é onde a mão encostou.
+      ${a.fora ? NF.format(a.fora) + " ficaram fora do recorte do Brasil." : ""}
+    </p></div>`;
+}
+
+function cidadesEtipos(a) {
+  if (!a.edicoes) return "";
+  const totTipos = a.tipos.reduce((s, [, v]) => s + v, 0) || 1;
+  const ROT = { MapUpdateRequest: "pedido de correção", Segment: "segmento",
+    Venue: "local", Node: "nó", PermanentHazard: "alerta fixo",
+    Street: "via", HouseNumber: "numeração", RoadClosure: "bloqueio" };
+  return `<div class="painel"><h2>Cidades com mais edições recentes</h2>
+    ${barras(a.cidades.map(([c, n]) => [c, n]), (v) => NF.format(v))}
+    <p style="color:var(--muted);font-size:.8rem;margin:10px 0 0">
+    O Waze só nomeia a cidade em ${Math.round(100 * a.comCidade / a.edicoes)}% das
+    edições; as demais entram no mapa mas não nesta lista.</p></div>
+    <div class="painel"><h2>O que está sendo mexido agora</h2>
+    ${barras(a.tipos.slice(0, 8).map(([k, v]) => [ROT[k] || k, v]),
+             (v) => Math.round(100 * v / totTipos) + "%")}
+    <p style="color:var(--muted);font-size:.8rem;margin:10px 0 0">
+    Operações das edições recentes, por tipo de objeto. Difere da composição
+    histórica: aqui pesa o que está sendo tocado nos últimos dias.</p></div>`;
+}
+
 function mapa(m) {
   if (!m.celulas.length) return "";
   const FAIXAS = [[5, 1, "5 ou mais"], [3, .72, "3 a 4"],
@@ -970,7 +1072,9 @@ function paineis() {
       país não entram na conta.</p></div>`);
   }
 
+  blocos.push(cidadesEtipos(p.atividade));
   blocos.push(calendario(p));
+  blocos.push(mapaAtividade(p.atividade));
   blocos.push(mapa(p.mapa));
 
   $("paineis").innerHTML = blocos.join("");

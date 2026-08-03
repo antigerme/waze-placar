@@ -36,6 +36,10 @@ MENTEES = "https://www.waze.com/row-Descartes/app/Mentoring/Mentees"
 # Não exige parâmetro: o HAR do botão "Buscar mais aprendizes" chama sem nada
 # e devolve a mesma lista que passando userID.
 NEW_EDITORS = "https://www.waze.com/row-Descartes/app/Mentoring/NewEditors"
+# As dez últimas edições de cada editor, geolocalizadas. Devolve um campo
+# nextTransactionDate que parece cursor mas não é: reenviá-lo traz a mesma
+# página. São dez e pronto — o que basta, porque cobrem os últimos dias.
+TRANSACTIONS = "https://www.waze.com/row-Descartes/app/UserProfile/Transactions"
 
 UA = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36")
@@ -415,6 +419,54 @@ def coleta_novatos(opener, quiet=False) -> List[dict]:
            for x in lista if x.get("userName")]
     if not quiet:
         print("  novatos: {} nomes".format(len(out)), file=sys.stderr)
+    return out
+
+
+def coleta_transacoes(opener, alvos, quiet=False) -> List[dict]:
+    """Onde cada editor mexeu por último. `alvos` é [(username, userId)].
+
+    Diferente das áreas gerenciadas, que dizem onde a pessoa tem
+    responsabilidade formal, isto diz onde ela realmente pôs a mão.
+    """
+    out = []                          # type: List[dict]
+    lock = threading.Lock()
+
+    def work(par):
+        username, uid = par
+        if not uid:
+            return
+        ref = "https://www.waze.com/user/editor/" + urllib.parse.quote(username)
+        try:
+            d = fetch(opener, TRANSACTIONS, {"userID": uid}, ref)
+        except SemPermissao:
+            return
+        linhas = []
+        for t in ((d or {}).get("transactions") or []):
+            c = (t.get("centroid") or {}).get("coordinates")
+            if not c or len(c) < 2:
+                continue
+            tipos = {}
+            for o in (t.get("operations") or []):
+                k = o.get("objectType")
+                if k:
+                    tipos[k] = tipos.get(k, 0) + 1
+            linhas.append({
+                "username": username,
+                "dias": t.get("daysSince"),
+                "lon": round(c[0], 4), "lat": round(c[1], 4),
+                # geocodificação vem incompleta; a página precisa dizer isso
+                "cidade": t.get("city"), "pais": t.get("country"),
+                "tipos": tipos,
+            })
+        if linhas:
+            with lock:
+                out.extend(linhas)
+
+    with ThreadPoolExecutor(max_workers=WORKERS) as pool:
+        list(pool.map(work, alvos))
+    if not quiet:
+        print("  transações: {} edições recentes de {} editores".format(
+            len(out), len({x["username"] for x in out})), file=sys.stderr)
     return out
 
 

@@ -68,7 +68,8 @@ def main() -> None:
                     dest="nao_salvar_cookies",
                     help="não regrava o arquivo de cookies com a sessão renovada")
     ap.add_argument("--sem-areas", action="store_true", dest="sem_areas",
-                    help="pula as áreas gerenciadas (~165 requisições a menos)")
+                    help="pula áreas gerenciadas e edições recentes "
+                         "(~600 requisições a menos)")
     ap.add_argument("--quiet", action="store_true")
     args = ap.parse_args()
 
@@ -186,9 +187,20 @@ def main() -> None:
                       file=sys.stderr)
             areas = waze.coleta_areas(opener, ativos, quiet=args.quiet)
 
+    transacoes = []
+    if not args.sem_areas:
+        alvos_tx = [(p["username"], p.get("userId")) for p in perfis
+                    if sum((p.get("activity") or [0])[:-1]) > 0 and p.get("userId")]
+        if alvos_tx:
+            if not args.quiet:
+                print("buscando edições recentes de {} editores…".format(len(alvos_tx)),
+                      file=sys.stderr)
+            transacoes = waze.coleta_transacoes(opener, alvos_tx, quiet=args.quiet)
+
     agora = dt.datetime.now().astimezone()
     dados = pagina.prepara(perfis, ufs, agora.strftime("%d/%m/%Y %H:%M %Z").strip(),
-                           areas=areas, estat=estat, extras=extras)
+                           areas=areas, estat=estat, extras=extras,
+                           transacoes=transacoes)
 
     out = Path(args.out)
     write_atomic(out, pagina.build_html(dados))
