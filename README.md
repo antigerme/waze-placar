@@ -14,18 +14,52 @@ HTML autocontido que abre em qualquer lugar.
 
 Precisa de Python 3.6+, nada além da biblioteca padrão — roda no
 `/usr/bin/python3` de fábrica do RHEL 8, que ainda é o 3.6. A autenticação é o
-cookie de sessão de uma conta logada no `waze.com`, em formato Netscape —
-por padrão em `/tmp/cookies.txt`.
+cookie de sessão de uma conta logada no `waze.com`, em formato Netscape, por
+padrão em `/tmp/cookies.txt`.
 
 ```bash
-python3 scripts/placar.py                      # gera placar.html
-python3 scripts/placar.py --print              # tabela no terminal
-python3 scripts/placar.py --period PAST_WEEK   # só uma janela
-python3 scripts/placar.py --json dados.json    # dados crus junto
-python3 scripts/placar.py --cookies ~/cookies.txt --out /var/www/placar.html
+python3 scripts/placar.py                                   # gera placar.html
+python3 scripts/placar.py --out /var/www/waze-placar/index.html
+python3 scripts/placar.py --sem-areas                       # sem os dois mapas
+python3 scripts/placar.py --sem-perfis                      # só o acumulado
+python3 scripts/placar.py --perfis perfis.jsonl             # reusa uma coleta
+python3 scripts/placar.py --salvar-perfis perfis.jsonl      # guarda para reusar
 ```
 
-Uma execução completa são 84 requisições e leva ~40 s.
+`scripts/perfis.py` faz a coleta de perfis sozinha, e é retomável — relendo o
+JSONL, pula quem já foi. Serve para pesquisa e para preparar um `--perfis`.
+
+## O que uma execução faz
+
+| Etapa | Requisições |
+|---|---|
+| Rankings: nacional + 27 UFs, nas três janelas | 84 |
+| Lista nacional de novatos | 1 |
+| Perfil de cada editor do universo | ~2.500 |
+| Lista completa de afilhados dos mentores | ~25 |
+| Perfil dos afilhados que não estão no universo | ~90 |
+| Áreas gerenciadas dos ativos | ~290 |
+| Últimas edições dos ativos | ~290 |
+
+Cerca de **3.300 requisições em ~40 minutos**, a ~1,25 req/s. `--sem-areas`
+corta as duas últimas etapas; `--sem-perfis` deixa só as duas primeiras.
+
+## O que a página mostra
+
+Quatro abas — 30 dias, 7 dias, 90 dias e Histórico — ordenadas por edições
+reais da janela. Cada linha traz UF, nível, selos de especialidade e ritmo,
+faísca de 90 dias, sequência de dias consecutivos e tendência.
+
+Quinze painéis: fator de ônibus por estado, concentração, safras, vigília de
+evasão, gigantes parados, ritmo semanal, nível e atividade, novatos, mentoria,
+quem cuida de área longe, calendário diário com os dias fora da curva, mapa de
+cobertura de área gerenciada e mapa de onde as edições acontecem.
+
+**Todo texto da página é derivado dos dados.** Não há número escrito à mão na
+prosa: limiares vêm de constantes nomeadas no topo do `pagina.py`, e as
+afirmações ou são descrição do método ou são medidas na própria coleta. Isso é
+proposital — a versão anterior afirmava coisas que deixaram de ser verdade sem
+ninguém perceber.
 
 ## Rodando diariamente no cron
 
@@ -33,12 +67,9 @@ Uma execução completa são 84 requisições e leva ~40 s.
 17 5 * * * /usr/bin/flock -n /tmp/waze-placar.lock /usr/bin/python3 /home/user/waze-placar/scripts/placar.py --out /var/www/waze-placar/index.html --quiet >> /var/log/waze-placar.log 2>&1
 ```
 
-Caminhos absolutos porque o cron roda com um ambiente mínimo — sem `PATH` útil,
-sem as variáveis do shell de login. O `flock -n` evita dois processos ao mesmo
-tempo se um dia uma execução travar. O `--quiet` corta o progresso por ranking
-mas mantém o resumo, que é o que vale no log.
-
-Antes de agendar, rode uma vez na mão para confirmar cookie e permissão.
+Caminhos absolutos porque o cron roda com um ambiente mínimo. O `flock -n` evita
+dois processos ao mesmo tempo se uma execução travar. Antes de agendar, rode uma
+vez na mão para confirmar cookie e permissão.
 
 ### O que o script garante sozinho
 
@@ -50,44 +81,37 @@ SELinux de lá e o httpd responderia 403.
 **Permissão explícita.** O arquivo sai `0644` mesmo se o cron rodar com umask
 restritiva — senão o httpd leva 403 num arquivo que existe.
 
-**Nada de página degradada.** Se algum dos 28 rankings não responder depois das
-tentativas, o script aborta com saída 1 e **não escreve nada** — a página do dia
-anterior continua no ar. O mesmo vale para cookie expirado: HTTP 401 encerra
-antes de tocar no destino. Para publicar mesmo incompleto, `--allow-partial`.
+**Nada de página degradada.** Se algum ranking não responder depois das
+tentativas, o script aborta com saída 1 e não escreve nada — a página do dia
+anterior continua no ar. O mesmo se o backend de perfis recusar a sessão no
+meio. Para publicar mesmo incompleto, `--allow-partial`.
 
 ### A sessão se renova sozinha
 
 O Waze responde os perfis com `Set-Cookie` de `_web_session`: a sessão é
-rolante. O script grava o cookie jar de volta no arquivo ao terminar, então
-cada execução parte da sessão que a anterior renovou, em vez de partir sempre
-do mesmo cookie exportado à mão.
+rolante. O script grava o cookie jar de volta ao terminar, então cada execução
+parte da sessão que a anterior renovou. Verificado em três execuções seguidas,
+com o token rotacionando e a seguinte autenticando com o que a anterior gravou.
+A gravação é atômica e mantém modo `0600`.
 
-Verificado em três execuções seguidas: o token rotaciona a cada uma
-(`R1pJ…` → `cDNV…` → `eDZr…`) e a seguinte autentica com o que a anterior
-gravou. A gravação é atômica e mantém modo `0600`.
-
-O que **não** acontece: o prazo absoluto do cookie não se move. Ele continua
-fixo na data em que a sessão foi criada no navegador — cerca de 30 dias. O que
-a renovação sustenta é o tempo ocioso do lado do servidor, que é bem mais curto
-e é o que fazia os perfis passarem a responder 403 depois de algumas horas.
+O que **não** acontece: o prazo absoluto do cookie não se move — fica fixo na
+data em que a sessão nasceu no navegador, cerca de 30 dias. O que a renovação
+sustenta é o tempo ocioso do servidor, bem mais curto, que é o que fazia os
+perfis passarem a responder 403 depois de algumas horas.
 
 Na prática: rodando todo dia, espere semanas sem reexportar, e uma reexportação
-manual quando o prazo absoluto vencer. O script avisa no log quando chegar lá.
+manual quando o prazo absoluto vencer. `--nao-salvar-cookies` desliga isso.
 
-`--nao-salvar-cookies` desliga a regravação.
-
-Como o arquivo virou uma credencial que precisa sobreviver a reinício, vale
-tirá-lo de `/tmp` — algo como `/etc/waze-placar/cookies.txt`, com
-`--cookies` apontando para lá.
+Como o arquivo virou credencial que precisa sobreviver a reinício, vale tirá-lo
+de `/tmp` — algo como `/etc/waze-placar/cookies.txt`, com `--cookies` apontando
+para lá.
 
 ### O que depende de você
 
-- **Cookies legíveis e graváveis pelo usuário do cron.** O script agora
-  regrava o arquivo. Se você exporta como seu usuário em modo 600 e o cron roda
-  como root, tudo bem; se roda como outro usuário, ajuste dono ou modo.
-- **Não reexporte por cima durante uma execução.** A gravação acontece no fim,
-  e sobrescreveria a exportação nova com a sessão da execução em andamento.
-  Ambas seriam válidas, mas a mais nova se perde.
+- **Cookies legíveis e graváveis pelo usuário do cron**, já que o script
+  regrava o arquivo.
+- **Não reexporte por cima durante uma execução.** A gravação acontece no fim e
+  sobrescreveria a exportação nova com a sessão da execução em andamento.
 - **Contexto SELinux do diretório**, se ele foi criado à mão:
 
   ```bash
@@ -97,80 +121,29 @@ tirá-lo de `/tmp` — algo como `/etc/waze-placar/cookies.txt`, com
 
 - **Rotação do log**, se `/var/log/waze-placar.log` incomodar com o tempo.
 
-## O que o placar mostra
-
-Três abas, que são exatamente as três janelas que a API oferece:
-
-| Aba | Janela da API | Editores no Brasil |
-|-----|---------------|--------------------|
-| Histórico | `ALL_TIME` | ~2.180 |
-| Mês | `PAST_MONTH` | ~77 |
-| Semana | `PAST_WEEK` | ~79 |
-
-Cada janela é varrida em 28 rankings — o nacional e os 27 estaduais — porque a
-API devolve no máximo 500 linhas por ranking e não tem paginação. A varredura
-estadual é o que leva o histórico de 500 para ~2.180 editores.
-
-Como os rankings estaduais **não se sobrepõem** (verificado: 3.000 editores em
-6 estados, zero repetição), a UF de cada editor sai de graça da varredura. A
-lista do próprio Waze não mostra isso.
-
-Clicar no nome abre `www.waze.com/user/editor/<username>` em nova aba — o mesmo
-destino que o placar original usava. Os nomes vêm de terceiros e são escapados
-antes de entrar no HTML.
-
-## As limitações, que são do Waze e não daqui
-
-**Os rankings ordenam por pontos, não por edições.** `points` é a pontuação
-combinada de dirigir e editar, e é a chave de ordenação de todo ranking. As 500
-vagas são disputadas por motorista também. O placar reordena por edições e
-descarta quem tem zero, mas não consegue recuperar quem ficou fora das 500
-linhas de origem.
-
-**Janela curta é quase só motorista.** O efeito acima piora quanto menor a
-janela: editores são 45% do ranking histórico do Brasil, mas 8% do mensal. Daí
-a diferença brutal entre ~2.180 e ~77. Não é bug da coleta — é o que o Waze
-entrega.
-
-**Só existem três janelas.** `ALL_TIME`, `PAST_WEEK` e `PAST_MONTH`. Qualquer
-outro valor de `lookbackPeriod` — `PAST_YEAR`, `LAST_7_DAYS`, ou lixo puro —
-volta com status 200 e o payload de `ALL_TIME`, sem erro nenhum. O script fixa
-o enum do lado do cliente para essa armadilha não passar batida.
-
-Dava para contornar tudo isso guardando snapshots diários e comparando: um diff
-de dois `ALL_TIME` com um mês de distância pegaria os ~2.180 que editaram, não
-77, e permitiria qualquer janela. Fica registrado como caminho caso um dia haja
-onde armazenar — o histórico do git tem o coletor com snapshot e diff, e o
-suporte a outros países, removidos daqui por estarem fora do escopo atual.
-
-## Notas
-
-- Cookies são credencial de sessão. O `.gitignore` bloqueia `cookies*.txt`,
-  `*.har` e `.env`; melhor manter assim.
-- O script limita a ~3 req/s em 4 workers e faz backoff em falha. Não observei
-  rate limiting do lado do Waze, mas a infraestrutura não é nossa.
-- `/_user/api/user` e `/il-UsersProfile/app/userInfo` devolvem PII real **do
-  próprio chamador** — nome completo, e-mail, cidade, última coordenada. Ambos
-  ignoram o parâmetro `userId`, então não servem para consultar terceiros, e
-  nada dali entra no placar.
-- `level` some do registro de quem nunca editou. Não assuma que a chave existe.
-
 ## Antes de mexer
 
-[`docs/api-recon.md`](docs/api-recon.md) é a referência da API: os dois backends,
-os oito endpoints, e principalmente as armadilhas — o `lookbackPeriod` que aceita
-valor inválido e responde 200 com outra coisa, o `Areas` que só funciona num dos
-ambientes, a lista de afilhados truncada em 10, a paginação de transações que não
-pagina, o campo `level` que some, a sessão rolante. Cada uma dessas custou uma
-conclusão errada aqui antes de virar uma linha no documento.
+[`docs/api-recon.md`](docs/api-recon.md) é a referência da API: os dois
+backends, os oito endpoints e principalmente as armadilhas — o `lookbackPeriod`
+que aceita valor inválido e responde 200 com outra coisa, o `Areas` que só
+funciona num dos ambientes, a lista de afilhados truncada em 10, a paginação de
+transações que não pagina, o campo `level` que some, os dois backends expirando
+em ritmos diferentes. Cada uma custou uma conclusão errada aqui antes de virar
+uma linha no documento.
 
 `scripts/auditar-layout.mjs` abre a página gerada num navegador em quatro
 larguras e falha se algo rolar lateralmente ou vazar do painel. Precisa de
 `npm i playwright`. Vale rodar depois de mexer no `pagina.py`: validar por
 métrica no Python deixou passar uma tabela que estourava em todas as larguras.
 
-## Estado
+## Notas
 
-Tudo que o projeto sabe está no repositório: código, este README e o documento
-da API. Não há banco, não há estado entre execuções, e nenhum dado coletado é
-versionado — cada execução refaz tudo do zero contra a API.
+- Cookies são credencial. O `.gitignore` bloqueia `cookies*.txt`, `*.har` e
+  `.env`; melhor manter assim.
+- O coletor usa throttle global com jitter entre requisições e embaralha a ordem
+  dos editores. Não observei rate limiting, mas não testei o teto de propósito —
+  a infraestrutura não é nossa.
+- `/_user/api/user`, `/il-UsersProfile/app/userInfo` e `/_user/api/trip`
+  devolvem PII real **do próprio chamador**. Nada dali entra no placar.
+- Nenhum dado coletado é versionado. Cada execução refaz tudo do zero contra a
+  API, e todo o conhecimento do projeto está no código e nos dois documentos.
