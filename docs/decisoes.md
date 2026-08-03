@@ -135,9 +135,18 @@ Brasil.
 | Ativos fora da varredura `ALL_TIME` | 42% |
 | Linhas de ranking de janela sem edição | 99% |
 
-O gradiente de nível é o mais estável de todos e o melhor sinal de sanidade:
-ele sobe monotonicamente e o N6 fica em 100%. Se ele quebrar, desconfie da
-coleta antes de desconfiar da comunidade.
+O gradiente de nível é o melhor sinal de sanidade: a fatia ativa cresce forte
+do N1 ao N4 — de 6% a 93% — e o N6 fica em 100%. **Não é monótono**: nesta
+medição o N5 aparece abaixo do N4, 91% contra 93%. A diferença é de dois
+editores e não significa nada; o que importa é o formato geral.
+
+Isso aqui já se contradisse: o parágrafo dizia "sobe monotonicamente" com a
+tabela logo acima mostrando 93% e depois 91%. E a página repetia a mesma
+afirmação em prosa, escrita à mão. Hoje a página mede e diz onde quebra, e este
+parágrafo descreve o que a tabela realmente mostra.
+
+Se o gradiente perder o formato — N1 alto, N6 baixo, ou saltos grandes no meio
+—, desconfie da coleta antes de desconfiar da comunidade.
 
 ---
 
