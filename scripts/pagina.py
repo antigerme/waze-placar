@@ -42,10 +42,6 @@ RITMO_DIAS = 60       # dias com edição para ser "constante"
 RITMO_PICO_MAX = 10   # % do total no maior dia, teto do "constante"
 RITMO_PICO_MIN = 25   # % do total no maior dia, piso do "explosivo"
 
-# A API de transações devolve sempre as N últimas edições de cada editor.
-# Está aqui porque a página cita o número ao explicar de onde vem o mapa.
-TRANSACOES_POR_EDITOR = 10
-
 
 def _streak(act):
     """Dias consecutivos editando, ignorando o dia de hoje (parcial)."""
@@ -122,7 +118,9 @@ def _silencio(act):
 # responsabilidade em outros países — contadas à parte, não desenhadas.
 MAPA_LON = (-74.5, -33.5)
 MAPA_LAT = (-34.0, 6.0)
-CELULA = 0.5                  # grau; ~55 km, resolução honesta para o tamanho
+# Lado da célula em grau. A conversão para km sai de CELULA * 111 e vai para o
+# cfg — a página não repete o número, lê de lá.
+CELULA = 0.5
 
 
 def _dentro(x, y, anel):
@@ -510,7 +508,7 @@ def prepara(perfis, ufs, gerado, areas=None, estat=None, extras=None,
             "ritmoDias": RITMO_DIAS,
             "ritmoPicoMax": RITMO_PICO_MAX,
             "ritmoPicoMin": RITMO_PICO_MIN,
-            "transacoesPorEditor": TRANSACOES_POR_EDITOR,
+            "transacoesPorEditor": waze.TRANSACOES_POR_EDITOR,
             "semAtividade": sem_atividade,
         },
         "estat": estat,
@@ -551,9 +549,12 @@ def prepara(perfis, ufs, gerado, areas=None, estat=None, extras=None,
     }
 
 
-PAGE = r"""<meta charset="utf-8">
+PAGE = r"""<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Placar dos Editores do Waze — Brasil</title>
+<meta name="description" content="Placar dos editores de mapa do Waze no Brasil, remontado a partir da API pública. Atividade recente, não acumulado de carreira.">
 <style>
   :root {
     color-scheme: light;

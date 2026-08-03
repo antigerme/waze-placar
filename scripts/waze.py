@@ -36,10 +36,13 @@ MENTEES = "https://www.waze.com/row-Descartes/app/Mentoring/Mentees"
 # Não exige parâmetro: o HAR do botão "Buscar mais aprendizes" chama sem nada
 # e devolve a mesma lista que passando userID.
 NEW_EDITORS = "https://www.waze.com/row-Descartes/app/Mentoring/NewEditors"
-# As dez últimas edições de cada editor, geolocalizadas. Devolve um campo
+# As últimas edições de cada editor, geolocalizadas. Devolve um campo
 # nextTransactionDate que parece cursor mas não é: reenviá-lo traz a mesma
-# página. São dez e pronto — o que basta, porque cobrem os últimos dias.
+# página. São TRANSACOES_POR_EDITOR e pronto, o que basta para os últimos dias.
 TRANSACTIONS = "https://www.waze.com/row-Descartes/app/UserProfile/Transactions"
+# Quantas a API devolve por editor. Está aqui, junto do endpoint, porque é fato
+# da API — e a página cita o número ao explicar de onde vem o mapa de atividade.
+TRANSACOES_POR_EDITOR = 10
 
 UA = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36")
