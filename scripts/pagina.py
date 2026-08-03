@@ -894,7 +894,7 @@ function mapaAtividade(a) {
        <span style="width:12px;height:12px;border-radius:3px;background:var(--series);
                     opacity:${o};display:inline-block"></span>${rot}</span>`).join("");
 
-  return `<div class="painel largo"><h2>Onde se edita agora</h2>
+  return `<div class="painel" style="grid-column:1/-1"><h2>Onde se edita agora</h2>
     <svg viewBox="0 0 ${a.nx} ${a.ny}" style="width:100%;max-width:520px;height:auto;
          display:block;margin:0 auto" shape-rendering="crispEdges" role="img"
          aria-label="Mapa das edições mais recentes no Brasil">${grade}${cells}</svg>
@@ -1084,17 +1084,17 @@ function paineis() {
 
   blocos.push(`<div class="painel"><h2>Nível e atividade</h2>
     ${p.niveis.map(([lv, n, viv]) => {
-      const max = Math.max(...p.niveis.map((r) => r[1])) || 1;
-      return `<div class="barra" title="Nível ${lv}: ${NF.format(n)} editores nesse nível, ${viv} deles ativos nos últimos ${D.cfg.janela} dias (${Math.round(100*viv/n)}%).">
+      const pct = n ? Math.round(100 * viv / n) : 0;
+      return `<div class="barra" title="Nível ${lv}: ${NF.format(n)} editores no nível, ${viv} deles ativos nos últimos ${D.cfg.janela} dias — ${pct}%.">
         <span>N${lv}</span>
-        <span class="t"><span class="f" style="width:${Math.max(1,(n/max)*100)}%;display:block"></span></span>
-        <span class="v" title="Nível ${lv}: existem ${NF.format(n)} editores nesse nível e ${viv} deles editaram nos últimos ${D.cfg.janela} dias."
-          >${NF.format(n)} <span style="opacity:.8">· ${Math.round(100*viv/n)}%</span></span>
+        <span class="t"><span class="f" style="width:${Math.max(1, pct)}%;display:block"></span></span>
+        <span class="v">${pct}% <span style="opacity:.6">de ${NF.format(n)}</span></span>
       </div>`;
     }).join("")}
     <p style="color:var(--muted);font-size:.8rem;margin:10px 0 0">
-    Barra é quantos editores há em cada nível; o percentual é quanto deles
-    editou nos últimos ${D.cfg.janela} dias.</p></div>`);
+    Barra é a fatia de cada nível que editou nos últimos ${D.cfg.janela} dias;
+    ao lado, quantos editores existem no nível. Sobe sem exceção do nível 1 ao
+    6.</p></div>`);
 
   blocos.push(`<div class="painel"><h2>Chegaram na janela</h2>
     ${p.novatos.length ? `<table><thead><tr>
