@@ -67,6 +67,8 @@ def main() -> None:
     ap.add_argument("--nao-salvar-cookies", action="store_true",
                     dest="nao_salvar_cookies",
                     help="não regrava o arquivo de cookies com a sessão renovada")
+    ap.add_argument("--sem-areas", action="store_true", dest="sem_areas",
+                    help="pula as áreas gerenciadas (~165 requisições a menos)")
     ap.add_argument("--quiet", action="store_true")
     args = ap.parse_args()
 
@@ -144,8 +146,21 @@ def main() -> None:
                            "edits": e["edits"], "activity": [],
                            "firstEditDate": None, "menteesCount": 0})
 
+    # Áreas só dos ativos: o mapa é sobre quem cuida da região hoje, e são
+    # ~165 requisições em vez de 2.200.
+    areas = {}
+    if not args.sem_areas:
+        ativos = [(p["username"], p.get("userId")) for p in perfis
+                  if sum((p.get("activity") or [0])[:-1]) > 0 and p.get("userId")]
+        if ativos:
+            if not args.quiet:
+                print("buscando áreas de {} editores ativos…".format(len(ativos)),
+                      file=sys.stderr)
+            areas = waze.coleta_areas(opener, ativos, quiet=args.quiet)
+
     agora = dt.datetime.now().astimezone()
-    dados = pagina.prepara(perfis, ufs, agora.strftime("%d/%m/%Y %H:%M %Z").strip())
+    dados = pagina.prepara(perfis, ufs, agora.strftime("%d/%m/%Y %H:%M %Z").strip(),
+                           areas=areas)
 
     out = Path(args.out)
     write_atomic(out, pagina.build_html(dados))

@@ -24,7 +24,10 @@ from typing import Dict, List, Optional, Tuple
 
 LEADERBOARD = "https://www.waze.com/_user/api/leaderboard"
 PROFILE = "https://www.waze.com/Descartes/app/UserProfile/Profile"
-AREAS = "https://www.waze.com/Descartes/app/UserProfile/Areas"
+# Profile é indiferente ao prefixo de ambiente; Areas NÃO é. Para editor
+# brasileiro só row-Descartes ("rest of world") devolve os polígonos —
+# Descartes e il-Descartes respondem 200 com managedAreas vazio.
+AREAS = "https://www.waze.com/row-Descartes/app/UserProfile/Areas"
 
 UA = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36")
@@ -306,6 +309,40 @@ def coleta_perfil(opener, username: str) -> Optional[dict]:
     ref = "https://www.waze.com/user/editor/" + urllib.parse.quote(username)
     d = fetch(opener, PROFILE, {"username": username}, ref)
     return normaliza_perfil(username, d) if d else None
+
+
+def coleta_areas(opener, alvos, quiet=False) -> Dict[str, list]:
+    """Busca as áreas gerenciadas. `alvos` é uma lista de (username, userId).
+
+    Só vale a pena para quem está ativo — são polígonos de gerência, e o mapa
+    interessa por quem cuida da área hoje, não por quem cuidava em 2014.
+    """
+    out = {}                          # type: Dict[str, list]
+    lock = threading.Lock()
+
+    def work(par):
+        username, uid = par
+        if not uid:
+            return
+        ref = "https://www.waze.com/user/editor/" + urllib.parse.quote(username)
+        try:
+            d = fetch(opener, AREAS, {"userID": uid}, ref)
+        except SemPermissao:
+            return
+        if not d:
+            return
+        pol = [a for a in (d.get("managedAreas") or [])
+               if a.get("type") == "Polygon" and a.get("coordinates")]
+        if pol:
+            with lock:
+                out[username] = pol
+
+    with ThreadPoolExecutor(max_workers=WORKERS) as pool:
+        list(pool.map(work, alvos))
+    if not quiet:
+        print("  áreas: {} de {} editores gerenciam alguma".format(
+            len(out), len(alvos)), file=sys.stderr)
+    return out
 
 
 def coleta_perfis(opener, usernames, quiet=False,
