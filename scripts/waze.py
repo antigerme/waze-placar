@@ -33,8 +33,9 @@ MENTEES = "https://www.waze.com/row-Descartes/app/Mentoring/Mentees"
 # Lista nacional de quem começou a editar há pouco — idêntica seja qual for o
 # mentor que consulta. É a única fonte de novatos: quem tem 3 edições não entra
 # em ranking nenhum, então sem isto o funil de entrada some do placar.
+# Não exige parâmetro: o HAR do botão "Buscar mais aprendizes" chama sem nada
+# e devolve a mesma lista que passando userID.
 NEW_EDITORS = "https://www.waze.com/row-Descartes/app/Mentoring/NewEditors"
-EU = "https://www.waze.com/_user/api/user"
 
 UA = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36")
@@ -295,7 +296,7 @@ def universo(opener, quiet=False) -> Tuple[List[dict], List[str]]:
     # Duas medidas que a página usa para não precisar afirmar nada de cor:
     # quanto o ranking histórico sozinho deixaria de fora, e que fatia das
     # linhas dos rankings de janela é de gente que não editou no período.
-    novatos = coleta_novatos(opener, meu_id(opener), quiet=quiet)
+    novatos = coleta_novatos(opener, quiet=quiet)
     novos_nomes = set()
     for n in novatos:
         if n["username"] in juntos:
@@ -401,19 +402,10 @@ def coleta_areas(opener, alvos, quiet=False) -> Dict[str, list]:
     return out
 
 
-def meu_id(opener) -> Optional[int]:
-    """userID da sessão, exigido por NewEditors."""
-    d = fetch(opener, EU, {}, "https://www.waze.com/leaderboard")
-    return (d or {}).get("id")
-
-
-def coleta_novatos(opener, uid, quiet=False) -> List[dict]:
+def coleta_novatos(opener, quiet=False) -> List[dict]:
     """Editores recém-chegados, que não aparecem em ranking por falta de pontos."""
-    if not uid:
-        return []
     try:
-        d = fetch(opener, NEW_EDITORS, {"userID": uid},
-                  "https://www.waze.com/user/editor/")
+        d = fetch(opener, NEW_EDITORS, {}, "https://www.waze.com/user/editor/")
     except SemPermissao:
         return []
     lista = d if isinstance(d, list) else []
