@@ -190,6 +190,12 @@ def prepara(perfis, ufs, gerado, areas=None, estat=None, extras=None,
             "areas": len(areas.get(p["username"]) or []),
         })
 
+    # Sem nenhum vetor diário não existe janela: `--sem-perfis`, ou uma coleta
+    # em que o Descartes recusou todos os perfis. Tudo que é medido em 7/30/90
+    # dias sai zerado, e zero aqui significa "não medido", não "não aconteceu".
+    # A página precisa saber disso para omitir em vez de afirmar.
+    sem_atividade = not any(p.get("activity") for p in perfis)
+
     idx = list(range(len(eds)))
     abas = {
         "d30": sorted([i for i in idx if eds[i]["d30"] > 0],
@@ -214,8 +220,10 @@ def prepara(perfis, ufs, gerado, areas=None, estat=None, extras=None,
                 diario[i] += v
 
     por90 = sorted(eds, key=lambda e: -e["d90"])
-    tot90 = sum(e["d90"] for e in eds) or 1
-    concentracao = [[n, round(100 * sum(e["d90"] for e in por90[:n]) / tot90, 1)]
+    tot90 = sum(e["d90"] for e in eds)
+    # A guarda de divisão fica na divisão. Somando `or 1` no total, uma coleta
+    # sem atividade diária publicava "1 edições em 90 dias".
+    concentracao = [[n, round(100 * sum(e["d90"] for e in por90[:n]) / (tot90 or 1), 1)]
                     for n in (5, 10, 25, 50, 100)]
 
     # Safras: quantos entraram em cada ano e quantos desses ainda editam.
@@ -459,12 +467,14 @@ def prepara(perfis, ufs, gerado, areas=None, estat=None, extras=None,
             # o ano em que o editor mais antigo do país começou
             "primeiroAno": min([e["ano"] for e in eds if e["ano"]] or [0]),
             "paradoMax": 100,        # limiar de "praticamente não edita"
+            "semAtividade": sem_atividade,
         },
         "estat": estat,
         "resumo": {
             "ativos30": ativos30,
             "ativos90": len(abas["d90"]),
             "historico": len(eds),
+            "edicoesTotal": sum(e["tot"] for e in eds),
             "edicoes90": tot90,
             "top50": concentracao[3][1],
             "deltaFds": delta_fds,
@@ -536,8 +546,16 @@ PAGE = r"""<meta charset="utf-8">
        letter-spacing:.06em; color:var(--muted) }
   .sub { color:var(--muted); font-size:.9rem; margin:0 0 22px }
 
+  /* 200px porque o número é o conteúdo: em 160px um total de oito dígitos
+     vazava da caixa em 390 e 768px. Com esta largura o auto-fit prefere
+     quebrar em menos colunas a cortar o número. */
   .kpis { display:grid; gap:10px; margin-bottom:20px;
-          grid-template-columns:repeat(auto-fit,minmax(160px,1fr)) }
+          grid-template-columns:repeat(auto-fit,minmax(200px,1fr)) }
+  /* Na faixa em que o auto-fit daria três colunas, o quarto cartão fica órfão
+     numa linha só dele. Duas colunas casadas ficam melhor e cabem folgadas. */
+  @media (min-width:640px) and (max-width:880px) {
+    .kpis { grid-template-columns:repeat(2,1fr) }
+  }
   .kpi { background:var(--card); border:1px solid var(--line);
          border-radius:12px; padding:14px 16px }
   .kpi b { display:block; font-size:1.7rem; letter-spacing:-.02em; line-height:1.15 }
@@ -628,6 +646,14 @@ PAGE = r"""<meta charset="utf-8">
   @media (max-width:520px) { .c-tend { display:none } }
   @media (max-width:620px) { .c-ativos { display:none } }
 
+  /* Coleta sem perfis: faísca, sequência e tendência saem do vetor diário, que
+     não foi coletado. Coluna vazia se leria como "não editou". Histórico sai
+     junto porque sobra só a aba do acumulado, e ela repetiria "Edições". */
+  body.sem-atividade .c-spark,
+  body.sem-atividade .c-seq,
+  body.sem-atividade .c-tend,
+  body.sem-atividade .c-hist { display:none }
+
   footer { margin-top:24px; color:var(--muted); font-size:.8rem }
   footer p { margin:.45em 0 }
   code { background:var(--chip); padding:1px 5px; border-radius:4px; font-size:.9em }
@@ -717,6 +743,8 @@ const AJUDA = {
     ativos: "Quantas pessoas fizeram ao menos uma edição nos últimos 30 dias. O total do histórico é muito maior porque inclui quem editou uma vez, anos atrás, e nunca voltou.",
     edicoes: "Soma de todas as edições feitas no Brasil nos últimos 90 dias, por todos os editores que o placar acompanha.",
     conc: "Fatia das edições dos últimos 90 dias que vem dos 50 editores mais produtivos. Quanto mais alto, mais o mapa depende de pouca gente.",
+    universo: "Quantos editores os rankings devolveram. É o universo inteiro que o placar enxerga, sem recorte de janela.",
+    carreiras: "Soma do total de carreira de todos esses editores. Cobre desde a primeira edição de cada um, sem recorte de janela.",
     fator1: "Estados em que um único editor responde por mais da metade das edições. Se essa pessoa parar, o estado perde metade do ritmo.",
   },
 };
@@ -983,6 +1011,19 @@ function paineis() {
   const p = D.paineis;
   const blocos = [];
 
+  // Sem vetor diário nenhum painel tem o que medir: todos recortam por janela,
+  // por data de estreia ou por área, e nada disso foi coletado. Mostrar os
+  // painéis zerados diria "não aconteceu" onde o certo é "não foi medido".
+  if (D.cfg.semAtividade) {
+    $("paineis").innerHTML = `<div class="painel largo aviso"><h2>Só o acumulado</h2>
+      <p style="color:var(--muted);font-size:.85rem;margin:0">
+      Esta execução leu os ${NF.format(D.cfg.rankings)} rankings mas não buscou
+      o perfil de ninguém, então não existe histórico diário — e é dele que
+      saem as janelas de atividade, as estreias e todos os painéis. A tabela
+      acima é o ranking acumulado, a única coisa que esta coleta mediu.</p></div>`;
+    return;
+  }
+
   blocos.push(`<div class="painel largo"><h2>Estados e fator de ônibus</h2>
     <table><thead><tr>
     <th title="Sigla do estado, deduzida de qual ranking estadual os editores aparecem.">UF</th>
@@ -1179,18 +1220,25 @@ function montaUfs() {
 
 function build() {
   const r = D.resumo;
-  $("sub").textContent = `Brasil · atividade de ${D.janela[0]} a ${D.janela[1]}`
+  const so = D.cfg.semAtividade;
+  if (so) { aba = "tot"; document.body.classList.add("sem-atividade"); }
+
+  $("sub").textContent = "Brasil · "
+    + (so ? "só o ranking acumulado" : `atividade de ${D.janela[0]} a ${D.janela[1]}`)
     + ` · gerado em ${D.gerado}`;
 
-  $("kpis").innerHTML = [
+  $("kpis").innerHTML = (so ? [
+    [NF.format(r.historico), "editores no ranking histórico", AJUDA.kpi.universo],
+    [NF.format(r.edicoesTotal), "edições somadas nas carreiras", AJUDA.kpi.carreiras],
+  ] : [
     [NF.format(r.ativos30), "editores ativos nos últimos 30 dias", AJUDA.kpi.ativos],
     [NF.format(r.edicoes90), "edições em 90 dias", AJUDA.kpi.edicoes],
     [r.top50 + "%", "das edições vêm de 50 pessoas", AJUDA.kpi.conc],
     [NF.format(r.fator1), "estados dependem de um único editor", AJUDA.kpi.fator1],
-  ].map(([v, k, aj]) =>
+  ]).map(([v, k, aj]) =>
     `<div class="kpi" title="${aj}"><b>${v}</b><span>${k}</span></div>`).join("");
 
-  $("tabs").innerHTML = ABAS.map(([k, rot]) =>
+  $("tabs").innerHTML = ABAS.filter(([k]) => !so || k === "tot").map(([k, rot]) =>
     `<button class="tab" role="tab" data-k="${k}" aria-selected="${k === aba}"
        title="${AJUDA.janela[k]} O número ao lado é quantos editores têm ao menos uma edição nessa janela.">
        ${rot} <span style="opacity:.65">${NF.format(D.abas[k].length)}</span>

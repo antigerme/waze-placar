@@ -3,15 +3,16 @@
 
 Sem banco, sem estado. Duas coletas ao vivo:
 
-  1. os 28 rankings (nacional + 27 UFs) dizem quem são os editores e de onde;
+  1. os 28 quadros de ranking (nacional + 27 UFs), cada um nas três janelas da
+     API, dizem quem são os editores e de onde;
   2. o perfil de cada um traz os últimos 91 dias de edições diárias.
 
-A página resultante ordena por atividade recente, e não pelo acumulado desde
-2011 — o acumulado premia quem já parou.
+A página resultante ordena por atividade recente, e não pelo acumulado da
+carreira inteira — o acumulado premia quem já parou.
 
 Uso:
     python3 scripts/placar.py --out /var/www/waze-placar/index.html
-    python3 scripts/placar.py --sem-perfis        # rápido, só o acumulado
+    python3 scripts/placar.py --sem-perfis        # rápido, só o ranking acumulado
     python3 scripts/placar.py --perfis perfis.jsonl   # reaproveita uma coleta
 """
 
@@ -58,7 +59,8 @@ def main() -> None:
     ap.add_argument("--out", default=str(ROOT / "placar.html"), help="HTML de saída")
     ap.add_argument("--perfis", help="JSONL de perfis já coletados, em vez de buscar")
     ap.add_argument("--sem-perfis", action="store_true", dest="sem_perfis",
-                    help="pula os perfis; a página sai só com o acumulado")
+                    help="pula os perfis; a página sai só com o ranking "
+                         "acumulado, sem janelas nem painéis")
     ap.add_argument("--salvar-perfis", dest="salvar",
                     help="grava os perfis coletados neste JSONL")
     ap.add_argument("--limit", type=int, help="usa só os N maiores (para teste)")
@@ -136,7 +138,8 @@ def main() -> None:
                 "só {} de {} perfis coletados antes do Descartes recusar a "
                 "sessão.\nNada foi publicado — a página anterior continua no "
                 "lugar. Atualize {} (o backend de perfis expira antes do de "
-                "rankings) ou rode com --sem-perfis.".format(
+                "rankings).\nCom --sem-perfis a página sai, mas só com o "
+                "ranking acumulado: sem janelas e sem painéis.".format(
                     len(perfis), len(editores), args.cookies))
 
     # Quem não teve perfil coletado ainda entra na página, só sem atividade.

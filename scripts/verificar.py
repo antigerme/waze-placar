@@ -79,7 +79,29 @@ for m in re.finditer(r"<(p|h2)[^>]*>(.*?)</\1>", tpl, re.S):
             achados, re.sub(r"<[^>]+>", "", limpo)[:70]))
 
 
-# ------------------------------- 5. limiares do pagina.py citados no decisoes
+# --------------------------------------- 5. lista de painéis no README
+# O README anunciava "quinze painéis" e nomeava treze, com nomes de duas
+# versões atrás. A lista fica entre marcadores para poder ser conferida.
+pag_txt = (SCRIPTS / "pagina.py").read_text(encoding="utf-8")
+# o painel de aviso da coleta sem perfis não é um dos painéis do placar
+gerados = [t for linha, t in re.findall(r"(.*)<h2>([^<]+)</h2>", pag_txt)
+           if "aviso" not in linha]
+bloco = re.search(r"<!-- paineis:inicio -->(.*?)<!-- paineis:fim -->",
+                  readme, re.S)
+if not bloco:
+    erro("paineis", "README perdeu os marcadores <!-- paineis:inicio/fim -->")
+else:
+    listados = re.findall(r"^- (.+?)\s*$", bloco.group(1), re.M)
+    for nome in sorted(set(gerados) - set(listados)):
+        erro("paineis", "o pagina.py gera '{}', que o README não lista".format(nome))
+    for nome in sorted(set(listados) - set(gerados)):
+        erro("paineis", "o README lista '{}', que o pagina.py não gera".format(nome))
+    if len(gerados) != len(listados) and set(gerados) == set(listados):
+        erro("paineis", "a lista do README tem {} itens e o pagina.py gera {}"
+             .format(len(listados), len(gerados)))
+
+
+# ------------------------------- 6. limiares do pagina.py citados no decisoes
 # Não exige que todos estejam lá; exige que o documento exista e tenha a tabela
 # de ordens de grandeza, que é o canário de regressão.
 dec = RAIZ / "docs" / "decisoes.md"

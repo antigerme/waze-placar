@@ -31,18 +31,22 @@ JSONL, pula quem já foi. Serve para pesquisa e para preparar um `--perfis`.
 
 ## O que uma execução faz
 
-| Etapa | Requisições |
-|---|---|
-| Rankings: nacional + 27 UFs, nas três janelas | 84 |
-| Lista nacional de novatos | 1 |
-| Perfil de cada editor do universo | ~2.500 |
-| Lista completa de afilhados dos mentores | ~25 |
-| Perfil dos afilhados que não estão no universo | ~90 |
-| Áreas gerenciadas dos ativos | ~290 |
-| Últimas edições dos ativos | ~290 |
+| Etapa | Requisições | Em 03/08/2026 |
+|---|---|---|
+| Rankings: nacional + 27 UFs, nas três janelas | fixo | 84 |
+| Lista nacional de novatos | fixo | 1 |
+| Perfil de cada editor do universo | 1 por editor | ~2.500 |
+| Lista completa de afilhados dos mentores | 1 por mentor | ~25 |
+| Perfil dos afilhados que não estão no universo | 1 por afilhado | ~90 |
+| Áreas gerenciadas dos ativos | 1 por ativo | ~290 |
+| Últimas edições dos ativos | 1 por ativo | ~290 |
 
-Cerca de **3.300 requisições em ~40 minutos**, a ~1,25 req/s. `--sem-areas`
-corta as duas últimas etapas; `--sem-perfis` deixa só as duas primeiras.
+Só as duas primeiras etapas têm tamanho fixo; as outras acompanham a comunidade,
+então o total de hoje não é o de daqui a um ano. Na data acima deu cerca de
+3.300 requisições em ~40 minutos, no ritmo de ~1,25 req/s que o coletor impõe.
+`--sem-areas` corta as duas últimas etapas; `--sem-perfis` deixa só as duas
+primeiras — e aí a página sai só com o ranking acumulado, sem janelas nem
+painéis, porque é só isso que essa coleta mede.
 
 ## O que a página mostra
 
@@ -50,10 +54,32 @@ Quatro abas — 30 dias, 7 dias, 90 dias e Histórico — ordenadas por ediçõe
 reais da janela. Cada linha traz UF, nível, selos de especialidade e ritmo,
 faísca de 90 dias, sequência de dias consecutivos e tendência.
 
-Quinze painéis: fator de ônibus por estado, concentração, safras, vigília de
-evasão, gigantes parados, ritmo semanal, nível e atividade, novatos, mentoria,
-quem cuida de área longe, calendário diário com os dias fora da curva, mapa de
-cobertura de área gerenciada e mapa de onde as edições acontecem.
+Abaixo da tabela, os painéis — `scripts/verificar.py` confere esta lista contra
+os títulos que o `pagina.py` gera, para ela não descolar de novo:
+
+<!-- paineis:inicio -->
+- Estados e fator de ônibus
+- Concentração
+- Safras de entrada
+- Produziam e pararam
+- Gigantes parados
+- Ritmo semanal
+- Nível e atividade
+- Chegaram na janela
+- Mentoria
+- Cuidam de longe
+- Cidades mais editadas
+- O que está sendo mexido
+- Calendário de edições
+- Onde se edita agora
+- Cobertura de gerentes
+<!-- paineis:fim -->
+
+Nem todos aparecem sempre: os que dependem de áreas ou de edições recentes
+somem com `--sem-areas`, e "Cuidam de longe" só aparece quando há alguém
+gerenciando área distante dos colegas de estado. Numa coleta `--sem-perfis` não
+há vetor diário, então nenhum deles tem o que medir e a página diz isso em vez
+de mostrar painel zerado.
 
 **Todo texto da página é derivado dos dados.** Não há número escrito à mão na
 prosa: limiares vêm de constantes nomeadas no topo do `pagina.py`, e as

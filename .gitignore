@@ -1,4 +1,4 @@
-# Never commit session cookies
+# credencial de sessão — nunca versionar
 cookies*.txt
 *.har
 .env
@@ -6,7 +6,13 @@ cookies*.txt
 __pycache__/
 *.pyc
 node_modules/
+package.json
+package-lock.json
 
 # saída gerada localmente
 placar.html
 placar.json
+
+# coletas: o CLAUDE.md manda guardar perfis num JSONL para reusar, e nenhum
+# dado coletado é versionado
+*.jsonl

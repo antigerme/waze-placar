@@ -46,6 +46,21 @@ página: ou é descrição do método, ou é medido na coleta.
 A análise de mentoria ficou impossível até alguém notar. Coletar é caro;
 descartar campo na entrada é desperdício silencioso.
 
+**Publicar zero em vez de não publicar.** O `--sem-perfis` saía com código 0 e
+uma página inteira de zeros: KPIs zerados, as quatro abas dizendo zero editor,
+painéis afirmando que ninguém editou, e "1 edições em 90 dias" — a guarda de
+divisão por zero vazando para dentro do texto. Pior, a mensagem de erro do
+próprio `placar.py` recomendava a flag quando o Descartes recusava a sessão,
+conselho que trocava a página boa de ontem por essa. Zero medido e zero por não
+ter medido são coisas diferentes: hoje a página detecta que não há vetor diário
+e diz que só tem o acumulado, em vez de afirmar ausência de atividade.
+
+**Auditar layout com número de brinquedo.** O `auditar-layout.mjs` passava
+porque a página de teste tinha KPI de cinco dígitos. Com o total real, de oito,
+o cartão vazava em 390 e 768px. A auditoria só enxerga o que está na página que
+você entrega a ela — teste com a ordem de grandeza real, que está na tabela
+mais abaixo.
+
 ---
 
 ## Caminhos testados e descartados

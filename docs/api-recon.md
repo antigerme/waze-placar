@@ -3,6 +3,13 @@
 Tudo aqui foi verificado contra a API viva, não deduzido do código do cliente.
 Onde há número, ele foi medido; onde algo não foi testado, está dito.
 
+**Sobre os números deste documento.** Uns descrevem a API e não mudam sozinhos
+— o teto de 500 linhas, os três valores do `lookbackPeriod`, as 91 posições do
+vetor diário. Outros são o tamanho da comunidade brasileira no dia em que
+foram medidos, e envelhecem: esses vêm marcados com **`medido em 03/08/2026`**
+e valem como ordem de grandeza, não como fato corrente. Se você precisa do
+número de hoje, ele está na página gerada, que o recalcula a cada execução.
+
 Dois backends distintos atendem o placar, e eles não se comportam igual:
 
 - **`/_user/api/…`** serve os rankings.
@@ -38,17 +45,20 @@ não havia janela nenhuma.
 `start` são todos ignorados.
 
 **Ordena por `points`, não por edições.** `points` soma dirigir e editar, e é a
-chave de ordenação. Medido: **99% das linhas dos rankings de janela são de quem
-não editou nada no período.**
+chave de ordenação. Por isso a maior parte de um ranking de janela é gente que
+dirigiu e não editou: **99% das linhas** (medido em 03/08/2026). A página
+recalcula essa fração a cada execução em vez de repetir esta.
 
-**Rankings estaduais não se sobrepõem.** Verificado: 3.000 editores em seis
-rankings estaduais, nenhum repetido. Isso deixa atribuir a UF de graça. E quem
-está no top 500 nacional está necessariamente no top 500 do próprio estado,
-porque o estado é subconjunto do país.
+**Rankings estaduais não se sobrepõem.** Verificado em seis rankings estaduais,
+3.000 editores, nenhum repetido (medido em 03/08/2026). Isso deixa atribuir a UF
+de graça. E quem está no top 500 nacional está necessariamente no top 500 do
+próprio estado, porque o estado é subconjunto do país.
 
 **Varrer só `ALL_TIME` não basta.** Ele ordena por pontos acumulados, então
-quem edita muito hoje mas tem pouco histórico fica fora. Medido: **42% dos
-editores ativos nos rankings de janela não aparecem na varredura `ALL_TIME`.**
+quem edita muito hoje mas tem pouco histórico fica fora — e não é uma minoria
+desprezível: **42% dos editores ativos nos rankings de janela** não apareciam
+na varredura `ALL_TIME` (medido em 03/08/2026). É por isso que o coletor varre
+as três janelas em vez de só o acumulado.
 
 ### Resposta
 
@@ -83,19 +93,21 @@ editor. Usuário inexistente devolve **500**, não 404.
 Campos que importam:
 
 - **`editingActivity`** — 91 inteiros, um por dia. Índice 0 é 90 dias atrás, o
-  último é hoje e vem parcial. Verificado: os 2.534 perfis coletados têm
-  exatamente 91 posições.
+  último é hoje e vem parcial. O tamanho é fixo: numa varredura de 2.534 perfis,
+  todos tinham exatamente 91 posições (medido em 03/08/2026).
 - `rank` — é o `level` do ranking **menos 1**.
-- `editsByType` — sete categorias. **`count` vem `null` com frequência** (11 mil
-  campos nulos numa coleta) e a soma não fecha com `edits`.
+- `editsByType` — sete categorias. **`count` vem `null` com frequência** — na
+  ordem de 11 mil campos nulos numa coleta inteira (medido em 03/08/2026) — e a
+  soma não fecha com `edits`.
 - `mentees[]` — **truncada em 10**. Verificado nos três mentores com mais que
   isso: todos cortados em exatamente 10. Use `Mentoring/Mentees`.
 - `firstEditDate`, `isMentor`, `menteesCount`, `forumPosts`, `lastEditEnv`.
 
 Os números do vetor diário **não batem** com as janelas do ranking. Num teste,
-30 dias somados deram 27.936 contra 28.244 do `PAST_MONTH`; na semana a
-distância foi maior. São relógios ou definições diferentes — use um ou outro,
-não misture.
+30 dias somados deram 27.936 contra 28.244 do `PAST_MONTH` (medido em
+03/08/2026); na semana a distância foi maior. O que importa não é o tamanho da
+diferença, que muda a cada dia, mas o fato de existir: são relógios ou
+definições diferentes — use um ou outro, não misture.
 
 ---
 
@@ -109,8 +121,9 @@ GET /row-Descartes/app/UserProfile/Areas?userID=<id>
 `row-Descartes` devolve polígono; `Descartes` e `il-Descartes` respondem 200 com
 `managedAreas` vazio. Isso já causou uma coleta zerada neste projeto.
 
-Os polígonos são reais, não caixas: **até 3.445 vértices**. Embutir a geometria
-crua numa página é inviável — o projeto rasteriza numa grade.
+Os polígonos são reais, não caixas: o maior encontrado tinha **3.445 vértices**
+(medido em 03/08/2026). Embutir a geometria crua numa página é inviável — o
+projeto rasteriza numa grade.
 
 ---
 
@@ -128,9 +141,13 @@ reenviá-lo devolve a mesma página — conferido comparando os `daysSince` das 
 chamadas.
 
 **"Dez últimas" não quer dizer recentes.** Para quem edita pouco elas podem ser
-de anos atrás: a coleta trouxe transação de **3.927 dias**. Filtre por janela.
+de anos atrás: a coleta trouxe transação de **3.927 dias** (medido em
+03/08/2026). Filtre por janela.
 
-A geocodificação é parcial: **cerca de 69%** trazem `city`.
+**A geocodificação é parcial.** Boa parte das transações vem sem `city`, então
+qualquer contagem por cidade cobre só um pedaço das edições. A fração exata
+muda de coleta para coleta; a página a mede e informa junto do painel, em vez
+de fixar um número aqui.
 
 ---
 
@@ -145,12 +162,12 @@ GET /{ambiente}/app/Mentoring/Communities?mentorID=   # só o link do fórum
 `Mentees` devolve a lista inteira, sem o corte de 10 do perfil.
 
 **`NewEditors` é o achado mais importante para cobertura.** Devolve editores
-recém-chegados — 319 brasileiros de 2025 e 2026 numa coleta — e **316 deles não
-apareciam em nenhum dos 84 rankings**, porque quem tem três edições não pontua o
-bastante para entrar. Sem esse endpoint o funil de entrada some do placar, e é
-fácil concluir, errado, que a comunidade parou de receber gente. A lista é
-nacional: idêntica seja qual for o mentor que consulta, e não precisa de
-parâmetro.
+recém-chegados que os rankings não mostram, porque quem tem três edições não
+pontua o bastante para entrar. A desproporção é o ponto: numa coleta, 319
+brasileiros na lista e **316 deles ausentes dos 84 rankings** (medido em
+03/08/2026). Sem esse endpoint o funil de entrada some do placar, e é fácil
+concluir, errado, que a comunidade parou de receber gente. A lista é nacional:
+idêntica seja qual for o mentor que consulta, e não precisa de parâmetro.
 
 `AddMentee` e `ArchiveMentee` existem e **alteram estado** — nunca foram
 chamados aqui.
@@ -197,5 +214,10 @@ que não se quer fazer. O coletor usa throttle global com jitter de 0,45 a 1,15 
 entre requisições — ~1,25 req/s medidos — e embaralha a ordem dos editores para
 o tráfego não desenhar a sequência do ranking.
 
-Uma execução completa hoje: 84 rankings + 1 lista de novatos + ~2.500 perfis +
-23 listas de afilhados + ~90 perfis de afilhados + ~290 áreas + ~290 transações.
+O volume de uma execução completa é fixo só nas duas primeiras etapas — 84
+rankings e 1 lista de novatos. As outras acompanham o tamanho da comunidade:
+um perfil por editor do universo, uma lista por mentor, uma área e uma lista de
+transações por editor ativo. Em 03/08/2026 isso dava ~2.500 perfis, 23 listas de
+afilhados, ~90 perfis de afilhados, ~290 áreas e ~290 transações. Os números do
+dia saem no `--quiet` desligado, e a tabela de ordens de grandeza do
+`docs/decisoes.md` serve de canário.

@@ -54,8 +54,8 @@ delas existe porque a coisa correspondente já desatualizou sem ninguém notar.
 
 ## Ao coletar
 
-Uma execução completa leva ~40 min e faz ~3.300 requisições. Para iterar sem
-recoletar:
+Uma execução completa é cara — dezenas de minutos e milhares de requisições, uma
+por editor do universo. Para iterar sem recoletar:
 
 ```bash
 python3 scripts/perfis.py --out perfis.jsonl      # retomável
@@ -64,8 +64,8 @@ python3 scripts/placar.py --sem-areas             # sem os dois mapas
 python3 scripts/placar.py --limit 20              # amostra
 ```
 
-Guarde a coleta num JSONL e reuse. Recoletar 2.500 perfis para testar mudança
-de layout é desperdício.
+Guarde a coleta num JSONL e reuse. Recoletar o universo inteiro para testar
+mudança de layout é desperdício.
 
 ## Cuidado com os cookies
 
