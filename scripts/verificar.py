@@ -116,7 +116,8 @@ def _numeros(txt):
 
 
 alvos = []
-for m in re.finditer(r"<(p|h2|th|td)[^>]*>(.*?)</\1>", limpo_tpl, re.S):
+# o lookahead impede que `<p` case `<path` de SVG e leve coordenada como prosa
+for m in re.finditer(r"<(p|h2|th|td)(?=[\s/>])[^>]*>(.*?)</\1>", limpo_tpl, re.S):
     alvos.append(("prosa", m.group(2)))
 for m in re.finditer(r'title="([^"]*)"', limpo_tpl):
     alvos.append(("dica", m.group(1)))
@@ -195,6 +196,11 @@ def _texto_dos_literais(js):
 # Pega inclusive o texto que ainda nem tem contexto definido.
 for _s in _texto_dos_literais(
         re.sub(r"//[^\n]*", "", sem_css[sem_css.find("<script>"):])):
+    # Fora as tags: número em atributo é marcação — coordenada de SVG, largura,
+    # viewBox —, não texto que alguém lê. Sem isto, `<circle cx="12"` passa pelo
+    # teste de frase ("circle" seguido de "cx") e vira falso positivo. A prosa
+    # que mora dentro de atributo já é conferida pela extração de `title=`.
+    _s = re.sub(r"<[^>]*>", " ", _s)
     if (re.search(r"[A-Za-zÀ-ÿ]{4,}\s+[a-zà-ÿ]{2,}", _s)
             and "px" not in _s and "var(" not in _s):
         alvos.append(("frase", _s))

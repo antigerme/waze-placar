@@ -612,6 +612,16 @@ PAGE = r"""<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Placar dos Editores do Waze — Brasil</title>
 <meta name="description" content="Placar dos editores de mapa do Waze no Brasil, remontado a partir da API pública. Atividade recente, não acumulado de carreira.">
+<script>
+// Antes do CSS pintar, de propósito: aplicado lá embaixo com o resto do script,
+// a página abriria no tema do sistema e piscaria para o escolhido.
+(function () {
+  try {
+    var t = localStorage.getItem("tema");
+    if (t === "dark" || t === "light") document.documentElement.dataset.theme = t;
+  } catch (e) {}          // navegador com storage bloqueado só fica no automático
+})();
+</script>
 <style>
   :root {
     color-scheme: light;
@@ -647,6 +657,14 @@ PAGE = r"""<!doctype html>
   h2 { font-size:.85rem; margin:0 0 14px; text-transform:uppercase;
        letter-spacing:.06em; color:var(--muted) }
   .sub { color:var(--muted); font-size:.9rem; margin:0 0 22px }
+
+  .topo { display:flex; align-items:flex-start; justify-content:space-between;
+          gap:12px }
+  .tema { flex:none; background:var(--card); border:1px solid var(--line);
+          color:var(--muted); border-radius:10px; padding:8px; cursor:pointer;
+          line-height:0 }
+  .tema:hover { color:var(--ink); border-color:var(--muted) }
+  .tema svg { width:18px; height:18px; display:block }
 
   /* 200px porque o número é o conteúdo: em 160px um total de oito dígitos
      vazava da caixa em 390 e 768px. Com esta largura o auto-fit prefere
@@ -775,8 +793,13 @@ PAGE = r"""<!doctype html>
 </style>
 
 <div class="wrap">
-  <h1>Placar dos Editores do Waze</h1>
-  <p class="sub" id="sub"></p>
+  <div class="topo">
+    <div>
+      <h1>Placar dos Editores do Waze</h1>
+      <p class="sub" id="sub"></p>
+    </div>
+    <button type="button" class="tema" id="tema"></button>
+  </div>
 
   <div class="kpis" id="kpis"></div>
 
@@ -837,6 +860,45 @@ const ESC = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ESC[c]);
 const perfil = (u) => "https://www.waze.com/user/editor/" + encodeURIComponent(u);
 const $ = (id) => document.getElementById(id);
+
+// --- tema -----------------------------------------------------------------
+// Sem escolha gravada a página segue o sistema, que é o que o CSS já faz. O
+// botão só fixa a escolha em data-theme, e o CSS cuida do resto.
+const ICONE = {
+  sol: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2M12 19.5v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M2.5 12h2M19.5 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></svg>',
+  lua: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>',
+};
+
+const estaEscuro = () => document.documentElement.dataset.theme
+  ? document.documentElement.dataset.theme === "dark"
+  : matchMedia("(prefers-color-scheme: dark)").matches;
+
+function pintaBotaoTema() {
+  const b = $("tema");
+  if (!b) return;
+  const escuro = estaEscuro();
+  // o ícone mostra para onde o clique leva, não onde a página está
+  b.innerHTML = escuro ? ICONE.sol : ICONE.lua;
+  const rot = escuro ? "Mudar para o tema claro" : "Mudar para o tema escuro";
+  b.title = rot;
+  b.setAttribute("aria-label", rot);
+}
+
+function ligaTema() {
+  const b = $("tema");
+  if (!b) return;
+  b.onclick = () => {
+    const novo = estaEscuro() ? "light" : "dark";
+    document.documentElement.dataset.theme = novo;
+    try { localStorage.setItem("tema", novo); } catch (e) {}
+    pintaBotaoTema();
+  };
+  // enquanto ninguém escolheu, acompanha o sistema mudando ao vivo
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+    if (!document.documentElement.dataset.theme) pintaBotaoTema();
+  });
+  pintaBotaoTema();
+}
 
 // Toda a ajuda de hover num lugar só, para poder ser lida e revisada de uma vez.
 // Nenhum número aqui é escrito à mão: todos saem do cfg, que sai das constantes
@@ -1456,6 +1518,7 @@ function build() {
   paineis();
 }
 
+ligaTema();
 build();
 </script>
 """
