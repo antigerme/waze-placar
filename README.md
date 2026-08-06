@@ -55,6 +55,11 @@ Quatro abas — 30 dias, 7 dias, 90 dias e Histórico — ordenadas por ediçõe
 reais da janela. Cada linha traz UF, nível, selos de especialidade e ritmo,
 faísca de 90 dias, sequência de dias consecutivos e tendência.
 
+Dentro da tabela, duas réguas marcam onde cai o editor típico e onde cai a
+média da aba. São linhas de referência, não pessoas: sem posição, sem selo e
+sem link. Acompanham o filtro de estado e a busca, e somem quando sobra pouca
+gente na tela para o valor significar algo.
+
 Tema claro e escuro: sem escolha feita a página segue o sistema, e o botão no
 canto superior fixa uma das duas. A escolha fica no `localStorage` do próprio
 navegador — a página continua estática, sem servidor e sem estado do lado de

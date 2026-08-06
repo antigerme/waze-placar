@@ -142,6 +142,14 @@ A comparação não é válida e a frase que a afirmava saiu.
 
 **Fuso de Brasília na página.** Decidido manter UTC, que é o fuso do servidor.
 
+**Marcar só a média na tabela.** A ideia era uma linha de média para se comparar
+com ela. Medindo antes de implementar, a média cai no terço superior de toda
+aba, porque a distribuição é muito torta: no Histórico ela é 5.946 vezes a
+mediana e deixa 91% da lista "abaixo da média" — verdade aritmética que não
+informa nada e, numa página de comunidade, só desanima. Entraram as duas
+réguas: a mediana parte a lista ao meio, que é onde a pergunta "sou típico?" se
+responde, e a distância até a média mostra a concentração sem precisar dizer.
+
 ---
 
 ## Ordens de grandeza

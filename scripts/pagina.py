@@ -32,6 +32,7 @@ CAL_DESVIOS = 2       # desvios da mediana para o dia entrar como fora da curva
 CONC_FAIXAS = (5, 10, 25, 50, 100)   # cortes do painel de concentração
 CONC_KPI = 50         # qual dos cortes vira KPI; precisa estar em CONC_FAIXAS
 CANDIDATOS_LISTA = 12  # linhas do painel de quem está subindo de nível
+REF_MIN = 10          # linhas na tela para as réguas da tabela significarem algo
 
 # Tendência: variação entre as duas metades da janela.
 TEND_MIN = 200        # volume mínimo para a razão significar algo
@@ -552,6 +553,7 @@ def prepara(perfis, ufs, gerado, areas=None, estat=None, extras=None,
             "recenteDias": RECENTE_DIAS,
             "calDesvios": CAL_DESVIOS,
             "concKpiN": CONC_KPI,
+            "refMin": REF_MIN,
             "baldes": BUCKETS,
             "baldeDias": BUCKET_DIAS,
             "tendBanda": TEND_BANDA,
@@ -786,6 +788,15 @@ PAGE = r"""<!doctype html>
   .duplo td:first-child a { display:inline-block; max-width:7rem;
     overflow:hidden; text-overflow:ellipsis; vertical-align:bottom }
 
+  /* régua: linha que não é gente. Sem link, sem selo, em versalete e com
+     tracejado dos dois lados, para não ser lida como mais um editor. */
+  tr.regua td { border-top:1px dashed var(--muted); border-bottom:1px dashed var(--muted);
+                background:var(--chip); color:var(--muted);
+                font-size:.72rem; letter-spacing:.05em; text-transform:uppercase;
+                padding-top:5px; padding-bottom:5px }
+  tr.regua td.name { font-weight:600 }
+  tr.regua td.num { font-variant-numeric:tabular-nums }
+
   footer { margin-top:24px; color:var(--muted); font-size:.8rem }
   footer p { margin:.45em 0 }
   code { background:var(--chip); padding:1px 5px; border-radius:4px; font-size:.9em }
@@ -920,6 +931,10 @@ const AJUDA = {
   tot: "Total de edições da carreira inteira. Não muda conforme a aba escolhida.",
   uf: "Estado do editor, deduzido de qual ranking estadual ele aparece. Os rankings estaduais não se sobrepõem.",
   nivel: "Nível de editor no Waze. Sobe com experiência e dá mais permissões no editor de mapas.",
+  regua: {
+    mediana: "Linha de referência, não é um editor. Metade de quem aparece nesta aba fez mais edições que isto, metade fez menos. Acompanha o filtro de estado e a busca.",
+    media: "Linha de referência, não é um editor. É a soma das edições desta aba dividida pelo número de editores. Acompanha o filtro de estado e a busca.",
+  },
   kpi: {
     ativos: `Quantas pessoas fizeram ao menos uma edição nos últimos ${C.janelaMedia} dias. A aba Histórico traz mais gente: lá entra também quem editou uma vez, anos atrás, e nunca voltou.`,
     edicoes: `Soma de todas as edições feitas no Brasil nos últimos ${C.janela} dias, por todos os editores que o placar acompanha.`,
@@ -997,10 +1012,49 @@ function tend(t) {
   return '<span class="flat"' + cap(`Ritmo estável: a variação entre as duas metades da janela ficou dentro de ${C.tendBanda}%.`) + ">→</span>";
 }
 
+// Réguas dentro da tabela: onde cai o editor típico e onde cai a média.
+// As duas porque a distância entre elas é a própria concentração — numa
+// distribuição torta a média sobe muito acima do meio da lista, e quem só
+// visse a média concluiria que quase todo mundo produz pouco.
+// Recalculadas sobre o que está na tela: filtrou um estado, a régua é a
+// daquele estado. Somem quando sobra pouca gente para o valor significar algo.
+function reguas(lista, c) {
+  if (lista.length < C.refMin) return {};
+  const v = lista.map((e) => e[c]);
+  const ord = v.slice().sort((a, b) => a - b);
+  const mediana = ord[Math.floor(ord.length / 2)];
+  const media = v.reduce((s, x) => s + x, 0) / v.length;
+  // a lista já vem em ordem decrescente: a régua entra antes do primeiro
+  // registro que fica abaixo dela
+  const onde = (x) => {
+    const i = v.findIndex((y) => y < x);
+    return i < 0 ? v.length : i;
+  };
+  const r = {};
+  const põe = (i, item) => { (r[i] = r[i] || []).push(item); };
+  põe(onde(media), ["média", Math.round(media), AJUDA.regua.media]);
+  põe(onde(mediana), ["mediana", mediana, AJUDA.regua.mediana]);
+  return r;
+}
+
+function linhaRegua(rot, valor, ajuda) {
+  return `<tr class="regua" title="${ajuda}">
+      <td class="pos"></td>
+      <td class="name">${rot} desta aba</td>
+      <td class="c-spark"></td>
+      <td class="num">${NF.format(valor)}</td>
+      <td class="num c-seq"></td>
+      <td class="num c-tend"></td>
+      <td class="num c-hist"></td>
+    </tr>`;
+}
+
 function render() {
   const lista = linhas();
   const c = col();
-  $("body").innerHTML = lista.map((e, n) => `<tr>
+  const reg = reguas(lista, c);
+  const antes = (n) => (reg[n] || []).map((r) => linhaRegua(...r)).join("");
+  $("body").innerHTML = lista.map((e, n) => `${antes(n)}<tr>
       <td class="pos">${n + 1}</td>
       <td class="name"><a href="${esc(perfil(e[0]))}" target="_blank"
          rel="noopener noreferrer" title="Ver perfil de ${esc(e[0])} no Waze"
@@ -1014,7 +1068,7 @@ function render() {
       <td class="num c-seq" title="${e[7] ? e[7] + " dia(s) seguidos editando" : "Não está numa sequência"}">${e[7] || ""}</td>
       <td class="num c-tend">${tend(e[8])}</td>
       <td class="num c-hist" title="${NF.format(e[3])} edições desde a primeira">${NF.format(e[3])}</td>
-    </tr>`).join("");
+    </tr>`).join("") + antes(lista.length);
   $("empty").hidden = lista.length > 0;
   $("thJanela").textContent =
     aba === "tot" ? "Edições" : "Edições · " + ABAS.find((a) => a[0] === aba)[1]
