@@ -72,6 +72,15 @@ falsa é exatamente o dia em que ela mais engana. Hoje o script confere e diz
 onde quebra. Vale para todo "sobe", "é raro", "quase todos": meça, ou não
 escreva.
 
+**Achar que dava para deduzir o significado de `rankLocked` do payload.** O
+campo vinha em 47 dos 172 candidatos brasileiros e o dado não dizia se era
+sanção ou rotina administrativa — proporção alta demais para parecer punição,
+o que puxava para o palpite de que fosse rotina. É sanção: confirmado por Champ
+da comunidade brasileira. A exclusão, decidida por precaução quando o
+significado era desconhecido, estava certa. Quando o campo é sobre pessoa
+nomeada e o significado é ambíguo, exclua primeiro e pergunte a quem sabe —
+inverter depois é barato, despublicar não é.
+
 **Inventar o mecanismo ao dar a ressalva.** A nota de mentoria dizia que os
 dois números não provam causa "porque quem procura mentor provavelmente já é
 quem tenderia a continuar". A ressalva estava certa, a explicação não era
@@ -182,11 +191,6 @@ interessante: para quem parou, as dez últimas edições são antigas.
 `ESTADOS` e o recorte do mapa. Um país novo precisa das subdivisões em ISO
 3166-2, dos nomes de estado por extenso como o `rankCandidates` os escreve, e de
 uma caixa geográfica.
-
-**O que significa `rankLocked`.** Vem em 47 dos 172 candidatos brasileiros.
-Quem o tem fica fora do painel inteiro, junto com os banidos. Se um dia der
-para confirmar que é rotina, e não sanção, vale reavaliar a exclusão — hoje o
-significado é palpite, e palpite sobre pessoa nomeada não vai para a página.
 
 **Os outros dois ambientes `-live`.** `Descartes-live` e `il-Descartes-live`
 respondem e trazem candidatos, mas nenhum brasileiro. Só seriam úteis se o

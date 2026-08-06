@@ -204,13 +204,16 @@ edições de carreira (medido em 06/08/2026).
 
 ### Campos que não são coletados
 
-`mapEditingBanned` e `rankLocked` dizem que uma pessoa nomeada está impedida de
-editar ou com o nível travado. É status disciplinar ou administrativo de gente
-identificável, e **não entra em dataset nem na página**. Quem tem qualquer um
-dos dois é removido da lista inteira pelo `coleta_candidatos`, não só do campo:
-esconder a marca não bastaria, porque aparecer numa lista de "prestes a subir de
-nível" já diria algo sobre quem está impedido de subir. Sobrevive só a contagem
-de quantos saíram — sem nome e sem motivo.
+`mapEditingBanned` e `rankLocked` são **os dois sanção** aplicada a uma pessoa
+nomeada — o segundo confirmado por Champ da comunidade brasileira, que é quem
+tem autoridade sobre isso; pelo payload não dava para distinguir sanção de
+rotina administrativa. **Não entram em dataset nem na página.**
+
+Quem tem qualquer um dos dois é removido da lista inteira pelo
+`coleta_candidatos`, não só do campo: esconder a marca não bastaria, porque
+aparecer numa lista de "prestes a subir de nível" já diria algo sobre quem está
+impedido de subir. Sobrevive só a contagem de quantos saíram — sem nome e sem
+motivo.
 
 `lastEditPoint` é a coordenada da última edição de uma pessoa nomeada. Não é
 coletado: onde o projeto mapeia posição, ele rasteriza numa grade de dezenas de

@@ -49,9 +49,9 @@ quem roda o script — nome, e-mail, endereço, histórico de navegação. Nada 
 entra em dataset ou na página.
 
 **Não publique status disciplinar de ninguém.** O `rankCandidates` devolve
-`mapEditingBanned` e `rankLocked` para gente nomeada. Isso é registro de
-punição ou de ação administrativa sobre uma pessoa real, e o placar é uma
-página de comunidade. Quem tem qualquer um dos dois sai da lista inteira, não
+`mapEditingBanned` e `rankLocked` para gente nomeada. Os dois são sanção — o
+segundo confirmado por Champ da comunidade —, e o placar é uma página de
+comunidade. Quem tem qualquer um dos dois sai da lista inteira, não
 só do campo — esconder a marca não basta, porque estar numa lista de "prestes a
 subir de nível" já diz algo sobre quem está impedido de subir. Sobra só a
 contagem, sem nome e sem motivo. Se aparecer campo novo dessa natureza, o
