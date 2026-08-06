@@ -151,6 +151,73 @@ de fixar um número aqui.
 
 ---
 
+## Candidatos a subir de nível
+
+```
+GET /row-Descartes-live/app/info/rankCandidates      # sem parâmetro nenhum
+```
+
+É o que alimenta `waze.com/pt-BR/dashboard/editor`. **Repare no sufixo
+`-live`**, que não existe em nenhum outro endpoint daqui: `Descartes-live`,
+`row-Descartes-live` e `il-Descartes-live` são ambientes à parte. Brasileiro só
+aparece em `row-Descartes-live` — os outros dois devolvem zero brasileiros —,
+então o país inteiro sai em **uma requisição**.
+
+Cada registro:
+
+```jsonc
+{
+  "userName": "fulano",
+  "curRank": 2,              // nível MENOS 1, igual ao `rank` do perfil
+  "candidateRank": 4,        // nível a que é candidato, também menos 1
+  "fracToNextRank": 0.978,   // progresso até o próximo nível; 1,0 é o limiar
+  "mapEditCount": 98520,
+  "countryName": "Brazil", "stateName": "Goiás",   // estado POR EXTENSO
+  "lastEditDate": 1444363272215,
+  "lastEditPoint": {"type": "Point", "coordinates": [-49.2, -16.6]},
+  "qualificationDate": null, // vem nulo em cerca de metade dos casos
+  "areaManager": false,
+  "mapEditingBanned": false,
+  "rankLocked": false
+}
+```
+
+**`curRank` é o nível menos 1.** Verificado cruzando com os perfis já
+coletados: bateu em 40 de 40 editores presentes nas duas fontes.
+
+**`fracToNextRank` é razão contra um limiar, e o limiar não é sempre o mesmo.**
+Dividindo `mapEditCount` pela fração sai o denominador. Para quem está no
+primeiro nível ele deu **3.000 edições para todos os 1.187 candidatos do
+mundo**, sem exceção. Acima disso o valor muda de pessoa para pessoa — no
+segundo nível apareceram 25.735, 25.653, 25.270 e assim por diante. O que entra
+nessa conta não está no payload, então **não dá para dizer "faltam N edições"**
+fora do primeiro nível. O projeto mede o denominador por nível e só cita o
+número onde ele é único.
+
+**O estado vem por extenso**, não em ISO 3166-2 como no ranking. Daí o mapa
+`ESTADOS` no `waze.py`.
+
+**A lista alcança quem o ranking não alcança.** Numa coleta, 132 dos 172
+candidatos brasileiros não estavam em nenhum dos 84 rankings — a maioria de
+nível baixo, que não pontua o bastante para entrar, mas um deles com 665.733
+edições de carreira (medido em 06/08/2026).
+
+### Campos que não são coletados
+
+`mapEditingBanned` e `rankLocked` dizem que uma pessoa nomeada está impedida de
+editar ou com o nível travado. É status disciplinar ou administrativo de gente
+identificável, e **não entra em dataset nem na página**. Quem tem qualquer um
+dos dois é removido da lista inteira pelo `coleta_candidatos`, não só do campo:
+esconder a marca não bastaria, porque aparecer numa lista de "prestes a subir de
+nível" já diria algo sobre quem está impedido de subir. Sobrevive só a contagem
+de quantos saíram — sem nome e sem motivo.
+
+`lastEditPoint` é a coordenada da última edição de uma pessoa nomeada. Não é
+coletado: onde o projeto mapeia posição, ele rasteriza numa grade de dezenas de
+quilômetros e nunca mostra ponto por pessoa.
+
+---
+
 ## Mentoria
 
 ```

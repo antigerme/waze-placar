@@ -44,6 +44,12 @@ TRANSACTIONS = "https://www.waze.com/row-Descartes/app/UserProfile/Transactions"
 # da API — e a página cita o número ao explicar de onde vem o mapa de atividade.
 TRANSACOES_POR_EDITOR = 10
 
+# Quem o Waze considera candidato a subir de nível, com o progresso que ele
+# mesmo calcula. Sem parâmetro nenhum, e o mundo inteiro em três requisições —
+# só que brasileiro só aparece em row-Descartes-live. Note o sufixo `-live`,
+# que não existe nos outros endpoints.
+RANK_CANDIDATES = "https://www.waze.com/row-Descartes-live/app/info/rankCandidates"
+
 UA = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36")
 
@@ -58,6 +64,20 @@ UFS = [
     "MT", "PA", "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC",
     "SE", "SP", "TO",
 ]
+
+# O rankCandidates devolve o estado por extenso, e não em ISO 3166-2 como o
+# ranking. Sem este mapa aqueles editores entrariam no placar sem UF.
+ESTADOS = {
+    "Acre": "AC", "Alagoas": "AL", "Amapá": "AP", "Amazonas": "AM",
+    "Bahia": "BA", "Ceará": "CE", "Distrito Federal": "DF",
+    "Espírito Santo": "ES", "Goiás": "GO", "Maranhão": "MA",
+    "Mato Grosso": "MT", "Mato Grosso do Sul": "MS", "Minas Gerais": "MG",
+    "Paraná": "PR", "Paraíba": "PB", "Pará": "PA", "Pernambuco": "PE",
+    "Piauí": "PI", "Rio Grande do Norte": "RN", "Rio Grande do Sul": "RS",
+    "Rio de Janeiro": "RJ", "Rondônia": "RO", "Roraima": "RR",
+    "Santa Catarina": "SC", "Sergipe": "SE", "São Paulo": "SP",
+    "Tocantins": "TO",
+}
 
 WORKERS = 3
 # Ritmo global com jitter: um pedido a cada 0,45–1,15 s no conjunto, e não por
@@ -315,6 +335,24 @@ def universo(opener, quiet=False) -> Tuple[List[dict], List[str]]:
             "edits": n["edits"], "points": 0, "uf": None,
         }
 
+    # Candidatos a subir de nível. A maior parte não aparece em ranking nenhum:
+    # são de nível baixo, e o ranking corta por pontos. Entram no universo pelo
+    # mesmo motivo dos novatos — sem eles o placar não enxerga essa gente.
+    candidatos, omitidos = coleta_candidatos(opener, quiet=quiet)
+    cand_fora = set()
+    for c in candidatos:
+        cur = juntos.get(c["username"])
+        if cur is None:
+            cand_fora.add(c["username"])
+            juntos[c["username"]] = {
+                "userId": None, "username": c["username"], "level": c["level"],
+                "edits": c["edits"], "points": 0, "uf": c["uf"],
+            }
+        else:
+            # o candidato traz UF por extenso onde o ranking não deu nenhuma
+            cur["uf"] = cur["uf"] or c["uf"]
+            cur["level"] = cur["level"] or c["level"]
+
     historico = porperiodo.get("ALL_TIME", set())
     ativos = set()
     for pp in PERIODS:
@@ -330,6 +368,9 @@ def universo(opener, quiet=False) -> Tuple[List[dict], List[str]]:
                          if janelas["linhas"] else 0),
         "novatosLista": len(novatos),
         "novatosForaDoRanking": len(novos_nomes),
+        "candidatos": candidatos,
+        "candidatosOmitidos": omitidos,
+        "candidatosForaDoRanking": len(cand_fora),
     }
     ordenado = sorted(juntos.values(), key=lambda r: -r["edits"])
     return ordenado, falhas, estat
@@ -423,6 +464,51 @@ def coleta_novatos(opener, quiet=False) -> List[dict]:
     if not quiet:
         print("  novatos: {} nomes".format(len(out)), file=sys.stderr)
     return out
+
+
+def coleta_candidatos(opener, quiet=False) -> Tuple[List[dict], int]:
+    """Quem está a caminho do próximo nível, com o progresso que o Waze calcula.
+
+    `fracToNextRank` é razão contra um limiar: 1,0 é estar no limiar. Para quem
+    sai do primeiro nível o limiar é fixo e a divisão devolve sempre o mesmo
+    número; acima disso ele varia de pessoa para pessoa, e o que entra nessa
+    conta não está no payload. Por isso a fração é repassada crua, sem virar
+    "faltam N edições".
+
+    `mapEditingBanned` e `rankLocked` vêm na resposta e **não são repassados**:
+    são status disciplinar ou administrativo de gente identificável, e não
+    entram em dataset nem na página. Quem tem qualquer um dos dois sai da lista
+    inteira — não basta esconder o campo, porque estar numa lista de "prestes a
+    subir de nível" já diria algo sobre quem está impedido de subir. Sobra só a
+    contagem de quantos saíram, sem dizer quem nem por quê.
+    """
+    try:
+        d = fetch(opener, RANK_CANDIDATES, {},
+                  "https://www.waze.com/pt-BR/dashboard/editor")
+    except SemPermissao:
+        return [], 0
+    out = []
+    omitidos = 0
+    for c in (d or {}).get("candidates") or []:
+        if c.get("countryName") != "Brazil" or not c.get("userName"):
+            continue
+        if c.get("mapEditingBanned") or c.get("rankLocked"):
+            omitidos += 1
+            continue
+        out.append({
+            "username": c["userName"],
+            # curRank é o nível menos 1, igual ao `rank` do perfil
+            "level": (c["curRank"] + 1) if isinstance(c.get("curRank"), int) else None,
+            "alvo": (c["candidateRank"] + 1)
+                    if isinstance(c.get("candidateRank"), int) else None,
+            "frac": c.get("fracToNextRank"),
+            "edits": c.get("mapEditCount") or 0,
+            "uf": ESTADOS.get(c.get("stateName") or ""),
+        })
+    if not quiet:
+        print("  candidatos a subir de nível: {} ({} omitidos)".format(
+            len(out), omitidos), file=sys.stderr)
+    return out, omitidos
 
 
 def coleta_transacoes(opener, alvos, quiet=False) -> List[dict]:

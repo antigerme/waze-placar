@@ -78,6 +78,15 @@ quem tenderia a continuar". A ressalva estava certa, a explicação não era
 medida — e provavelmente estava invertida, já que no Waze é o mentor que
 adiciona o afilhado (`AddMentee`). Dar a ressalva não autoriza inventar a razão.
 
+**Quase transformar percentual em "faltam N edições".** O `fracToNextRank` do
+`rankCandidates` parece progresso em edições, e para quem sai do primeiro nível
+é mesmo: o denominador dá 3.000 cravado para todos os candidatos do mundo. A
+tentação era publicar "faltam N edições para o nível X" em toda a tabela.
+Medindo, o denominador do segundo nível em diante muda de pessoa para pessoa —
+25.735 para um, 25.270 para outro — e o que entra nessa conta não está no
+payload. Hoje o script mede o limiar por nível e só cita o número onde ele é
+único; nos outros mostra o percentual e diz que não sabe quanto falta.
+
 **Auditar layout com número de brinquedo.** O `auditar-layout.mjs` passava
 porque a página de teste tinha KPI de cinco dígitos. Com o total real, de oito,
 o cartão vazava em 390 e 768px. A auditoria só enxerga o que está na página que
@@ -162,9 +171,19 @@ Custo: até 2.500 requisições a mais.
 **`Transactions` dos inativos**, pelo mesmo motivo e com o mesmo custo. Menos
 interessante: para quem parou, as dez últimas edições são antigas.
 
-**Outros países.** Toda a estrutura é agnóstica menos a lista de UFs e o
-recorte do mapa. Um país novo precisa das subdivisões em ISO 3166-2 e de uma
-caixa geográfica.
+**Outros países.** Toda a estrutura é agnóstica menos a lista de UFs, o mapa
+`ESTADOS` e o recorte do mapa. Um país novo precisa das subdivisões em ISO
+3166-2, dos nomes de estado por extenso como o `rankCandidates` os escreve, e de
+uma caixa geográfica.
+
+**O que significa `rankLocked`.** Vem em 47 dos 172 candidatos brasileiros.
+Quem o tem fica fora do painel inteiro, junto com os banidos. Se um dia der
+para confirmar que é rotina, e não sanção, vale reavaliar a exclusão — hoje o
+significado é palpite, e palpite sobre pessoa nomeada não vai para a página.
+
+**Os outros dois ambientes `-live`.** `Descartes-live` e `il-Descartes-live`
+respondem e trazem candidatos, mas nenhum brasileiro. Só seriam úteis se o
+escopo saísse do Brasil.
 
 **Rate limiting.** Nunca foi testado o teto, de propósito. Se um dia for
 necessário subir o ritmo, subir aos poucos e observar, não procurar o limite.

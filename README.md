@@ -35,16 +35,17 @@ JSONL, pula quem já foi. Serve para pesquisa e para preparar um `--perfis`.
 |---|---|---|
 | Rankings: nacional + 27 UFs, nas três janelas | fixo | 84 |
 | Lista nacional de novatos | fixo | 1 |
+| Candidatos a subir de nível | fixo | 1 |
 | Perfil de cada editor do universo | 1 por editor | ~2.500 |
 | Lista completa de afilhados dos mentores | 1 por mentor | ~25 |
 | Perfil dos afilhados que não estão no universo | 1 por afilhado | ~90 |
 | Áreas gerenciadas dos ativos | 1 por ativo | ~290 |
 | Últimas edições dos ativos | 1 por ativo | ~290 |
 
-Só as duas primeiras etapas têm tamanho fixo; as outras acompanham a comunidade,
+Só as três primeiras etapas têm tamanho fixo; as outras acompanham a comunidade,
 então o total de hoje não é o de daqui a um ano. Na data acima deu cerca de
 3.300 requisições em ~40 minutos, no ritmo de ~1,25 req/s que o coletor impõe.
-`--sem-areas` corta as duas últimas etapas; `--sem-perfis` deixa só as duas
+`--sem-areas` corta as duas últimas etapas; `--sem-perfis` deixa só as três
 primeiras — e aí a página sai só com o ranking acumulado, sem janelas nem
 painéis, porque é só isso que essa coleta mede.
 
@@ -66,6 +67,7 @@ os títulos que o `pagina.py` gera, para ela não descolar de novo:
 - Ritmo semanal
 - Nível e atividade
 - Chegaram na janela
+- A caminho do próximo nível
 - Mentoria
 - Cuidam de longe
 - Cidades mais editadas
@@ -156,13 +158,18 @@ para lá.
 
 ## Antes de mexer
 
-[`docs/api-recon.md`](docs/api-recon.md) é a referência da API: os dois
-backends, os oito endpoints e principalmente as armadilhas — o `lookbackPeriod`
-que aceita valor inválido e responde 200 com outra coisa, o `Areas` que só
-funciona num dos ambientes, a lista de afilhados truncada em 10, a paginação de
-transações que não pagina, o campo `level` que some, os dois backends expirando
-em ritmos diferentes. Cada uma custou uma conclusão errada aqui antes de virar
-uma linha no documento.
+[`docs/api-recon.md`](docs/api-recon.md) é a referência da API: cada endpoint
+usado, os ambientes em que ele funciona, e principalmente as armadilhas — o
+`lookbackPeriod` que aceita valor inválido e responde 200 com outra coisa, o
+`Areas` que só funciona num dos ambientes, a lista de afilhados truncada em 10,
+a paginação de transações que não pagina, o campo `level` que some, o
+`fracToNextRank` cujo denominador muda de pessoa para pessoa acima do primeiro
+nível, os backends expirando em ritmos diferentes. Cada uma custou uma conclusão
+errada aqui antes de virar uma linha no documento.
+
+O documento também marca o que **não** se coleta e por quê: além dos endpoints
+de PII, os campos do `rankCandidates` que dizem se uma pessoa nomeada está
+banida ou com o nível travado.
 
 [`docs/decisoes.md`](docs/decisoes.md) guarda o resto: os erros que este
 projeto já cometeu e como cada um foi descoberto, os caminhos testados e

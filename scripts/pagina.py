@@ -31,6 +31,7 @@ RECENTE_DIAS = 14     # "ainda ativo" para quem acabou de estrear
 CAL_DESVIOS = 2       # desvios da mediana para o dia entrar como fora da curva
 CONC_FAIXAS = (5, 10, 25, 50, 100)   # cortes do painel de concentração
 CONC_KPI = 50         # qual dos cortes vira KPI; precisa estar em CONC_FAIXAS
+CANDIDATOS_LISTA = 12  # linhas do painel de quem está subindo de nível
 
 # Tendência: variação entre as duas metades da janela.
 TEND_MIN = 200        # volume mínimo para a razão significar algo
@@ -354,6 +355,42 @@ def prepara(perfis, ufs, gerado, areas=None, estat=None, extras=None,
                 fora = -1
         calendario.append([(d0 + dt.timedelta(days=i)).isoformat(), v, fora])
 
+    # --- quem está a caminho do próximo nível --------------------------------
+    # `frac` é a razão que o Waze calcula contra o limiar do próximo nível.
+    # O limiar sai dividindo as edições pela fração — mas só vale citar quando
+    # todo mundo do mesmo nível devolve o mesmo valor. Para o primeiro nível
+    # isso acontece; acima dele o denominador muda de pessoa para pessoa, e a
+    # página não tem como dizer quanto falta. Então o limiar é medido aqui, por
+    # nível, e só é publicado onde for único.
+    cands = [c for c in (estat.get("candidatos") or []) if c.get("frac")]
+    limiares = {}
+    porniv_c = defaultdict(set)
+    for c in cands:
+        if c.get("level") and c.get("edits"):
+            porniv_c[c["level"]].add(round(c["edits"] / c["frac"]))
+    for lv, vals in porniv_c.items():
+        if len(vals) == 1:
+            limiares[lv] = vals.pop()
+    prontos = sorted((c for c in cands if c["frac"] >= 1),
+                     key=lambda c: (-(c.get("level") or 0), -c["edits"]))
+    quase = sorted((c for c in cands if c["frac"] < 1), key=lambda c: -c["frac"])
+    def _linha(c):
+        # trunca em vez de arredondar: com 99,9% arredondado, quem ainda não
+        # chegou aparecia com "100%" na lista de quem ainda não chegou
+        return [c["username"], c["uf"], c.get("level"), c.get("alvo"),
+                int(100 * c["frac"]), c["edits"],
+                limiares.get(c.get("level"))]
+    candidatos = {
+        "prontos": [_linha(c) for c in prontos[:CANDIDATOS_LISTA]],
+        "quase": [_linha(c) for c in quase[:CANDIDATOS_LISTA]],
+        "totalProntos": len(prontos),
+        "totalQuase": len(quase),
+        "omitidos": estat.get("candidatosOmitidos") or 0,
+        "foraDoRanking": estat.get("candidatosForaDoRanking") or 0,
+        # níveis cujo limiar é o mesmo para todo mundo, então dá para citar
+        "limiares": sorted(limiares.items()),
+    }
+
     # --- mentoria ------------------------------------------------------------
     apad = {}
     for p in perfis:
@@ -511,7 +548,9 @@ def prepara(perfis, ufs, gerado, areas=None, estat=None, extras=None,
             "transacoesPorEditor": waze.TRANSACOES_POR_EDITOR,
             "semAtividade": sem_atividade,
         },
-        "estat": estat,
+        # a lista crua de candidatos já virou painel; mandá-la de novo aqui
+        # dobraria o peso dela na página sem ninguém ler
+        "estat": {k: v for k, v in estat.items() if k != "candidatos"},
         "resumo": {
             "ativos30": ativos30,
             "ativos90": len(abas["d90"]),
@@ -544,6 +583,7 @@ def prepara(perfis, ufs, gerado, areas=None, estat=None, extras=None,
             "mentoria": mentoria,
             "atividade": atividade,
             "forasteiros": forasteiros[:8],
+            "candidatos": candidatos,
             "mapa": _grade_cobertura(areas, ufs),
         },
     }
@@ -698,6 +738,12 @@ PAGE = r"""<!doctype html>
   body.sem-atividade .c-seq,
   body.sem-atividade .c-tend,
   body.sem-atividade .c-hist { display:none }
+
+  /* duas listas lado a lado dentro de um painel largo; empilham no estreito */
+  .duplo { display:grid; gap:18px 24px;
+           grid-template-columns:repeat(auto-fit,minmax(260px,1fr)) }
+  .duplo h3 { font-size:.78rem; margin:0 0 8px; text-transform:uppercase;
+              letter-spacing:.05em; color:var(--muted); font-weight:600 }
 
   footer { margin-top:24px; color:var(--muted); font-size:.8rem }
   footer p { margin:.45em 0 }
@@ -1216,6 +1262,49 @@ function paineis() {
     últimos ${D.cfg.recenteDias} dias.</p></div>`);
 
   const mt = p.mentoria;
+  const nv = p.candidatos;
+  if (nv && (nv.totalProntos || nv.totalQuase)) {
+    const linhas = (arr, pronto) => arr.map(([u, uf, lv, alvo, pct, ed, lim]) => `<tr>
+      <td>${link(u)} <span class="chip">${uf || "--"}</span></td>
+      <td class="num" title="${lv ? "Está no nível " + lv + " e é candidato ao nível " + alvo + "." : "Nível não informado."}">${lv ? "N" + lv + "→N" + alvo : "--"}</td>
+      <td class="num${pronto ? " up" : ""}" title="${lim
+        ? NF.format(ed) + " de " + NF.format(lim) + " edições — o limiar deste nível é o mesmo para todo mundo nesta coleta."
+        : NF.format(ed) + " edições. O limiar deste nível não é o mesmo para todo mundo, então a página não diz quanto falta."}">${pronto ? "✓" : pct + "%"}</td>
+      </tr>`).join("");
+    blocos.push(`<div class="painel largo"><h2>A caminho do próximo nível</h2>
+      <div class="duplo">
+      <div><h3>Já chegaram ao limiar</h3>
+      ${nv.totalProntos ? `<table><thead><tr>
+        <th title="Editor que o Waze lista como candidato e que já atingiu o limiar do próximo nível.">Editor</th>
+        <th class="num" title="Nível atual e o nível a que é candidato.">Nível</th>
+        <th class="num" title="Progresso que o Waze calcula até o próximo nível. O visto marca quem já está no limiar ou acima.">Progr.</th>
+        </tr></thead><tbody>${linhas(nv.prontos, true)}</tbody></table>`
+        : `<p style="color:var(--muted)">Ninguém no limiar agora.</p>`}</div>
+      <div><h3>Mais perto de chegar</h3>
+      ${nv.totalQuase ? `<table><thead><tr>
+        <th title="Editor que o Waze lista como candidato e ainda não atingiu o limiar.">Editor</th>
+        <th class="num" title="Nível atual e o nível a que é candidato.">Nível</th>
+        <th class="num" title="Progresso que o Waze calcula até o próximo nível.">Progr.</th>
+        </tr></thead><tbody>${linhas(nv.quase, false)}</tbody></table>`
+        : `<p style="color:var(--muted)">Ninguém abaixo do limiar agora.</p>`}</div>
+      </div>
+      <p style="color:var(--muted);font-size:.8rem;margin:10px 0 0">
+      <b>${NF.format(nv.totalProntos)}</b> já estão no limiar do próximo nível e
+      <b>${NF.format(nv.totalQuase)}</b> ainda não. O progresso é o que o próprio
+      Waze calcula${nv.limiares.length
+        ? `; medindo edições contra progresso, o limiar sai igual para todos os
+           candidatos ${nv.limiares.map(([lv, v]) =>
+             "do nível " + lv + " (" + NF.format(v) + " edições)").join(" e ")}.
+           Nos demais níveis ele muda de pessoa para pessoa, e o que entra nessa
+           conta não vem no dado — por isso a página não diz quanto falta`
+        : ", e o que entra nessa conta não vem no dado"}.
+      ${nv.foraDoRanking ? `<b>${NF.format(nv.foraDoRanking)}</b> destes editores não
+        apareciam em ranking nenhum e entraram no placar por esta lista.` : ""}
+      ${nv.omitidos ? `Outros <b>${NF.format(nv.omitidos)}</b> candidatos não entram
+        nesta lista.` : ""}
+      </p></div>`);
+  }
+
   blocos.push(`<div class="painel"><h2>Mentoria</h2>
     ${mt.rastreados ? `<div class="barra" title="Dos ${NF.format(mt.rastreados)} editores que aparecem como afilhados de alguém, ${mt.pctApad}% editaram nos últimos ${D.cfg.janela} dias."><span>apadr.</span>
        <span class="t"><span class="f" style="width:${mt.pctApad}%;display:block"></span></span>

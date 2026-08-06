@@ -48,6 +48,19 @@ que estourava o container em todas as larguras.
 quem roda o script — nome, e-mail, endereço, histórico de navegação. Nada dali
 entra em dataset ou na página.
 
+**Não publique status disciplinar de ninguém.** O `rankCandidates` devolve
+`mapEditingBanned` e `rankLocked` para gente nomeada. Isso é registro de
+punição ou de ação administrativa sobre uma pessoa real, e o placar é uma
+página de comunidade. Quem tem qualquer um dos dois sai da lista inteira, não
+só do campo — esconder a marca não basta, porque estar numa lista de "prestes a
+subir de nível" já diz algo sobre quem está impedido de subir. Sobra só a
+contagem, sem nome e sem motivo. Se aparecer campo novo dessa natureza, o
+padrão é remover o registro, não mascarar o campo.
+
+Coordenada por pessoa também não: onde o projeto mostra posição, ele rasteriza
+numa grade de dezenas de quilômetros. É por isso que o `lastEditPoint` do
+`rankCandidates` não é coletado.
+
 **Não aumente o ritmo das requisições.** O throttle com jitter em ~1,25 req/s é
 deliberado. O teto do Waze nunca foi testado, de propósito.
 
