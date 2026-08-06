@@ -146,6 +146,13 @@ Brasil.
 | Ativos fora da varredura `ALL_TIME` | 42% |
 | Linhas de ranking de janela sem edição | 99% |
 
+O `rankCandidates` entrou depois desta tabela, então ele tem os números dele, de
+06/08/2026: **120 candidatos brasileiros na lista, 53 omitidos** por banimento
+ou nível travado, e **90 que não apareciam em ranking nenhum**. Como esses 90
+passaram a entrar no universo, o total de editores da próxima execução completa
+vai nascer acima dos 2.534 desta tabela — a diferença é o endpoint novo, não
+coleta quebrada.
+
 O gradiente de nível é o melhor sinal de sanidade: a fatia ativa cresce forte
 do N1 ao N4 — de 6% a 93% — e o N6 fica em 100%. **Não é monótono**: nesta
 medição o N5 aparece abaixo do N4, 91% contra 93%. A diferença é de dois
