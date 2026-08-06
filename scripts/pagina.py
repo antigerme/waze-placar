@@ -362,7 +362,16 @@ def prepara(perfis, ufs, gerado, areas=None, estat=None, extras=None,
     # isso acontece; acima dele o denominador muda de pessoa para pessoa, e a
     # página não tem como dizer quanto falta. Então o limiar é medido aqui, por
     # nível, e só é publicado onde for único.
-    cands = [c for c in (estat.get("candidatos") or []) if c.get("frac")]
+    todos_cands = [c for c in (estat.get("candidatos") or []) if c.get("frac")]
+    # O Waze lista como candidato quem bate o critério de edições acumuladas,
+    # não quem está editando. Medido: a maior parte da lista não tinha nenhuma
+    # edição na janela, e os primeiros colocados de "mais perto de chegar"
+    # estavam todos parados — um painel chamado "a caminho" prometendo
+    # movimento onde não há. Fica quem editou na janela; o resto do placar já
+    # cuida de quem parou.
+    ativos_ed = {e["u"] for e in eds if e["d90"] > 0}
+    cands = [c for c in todos_cands if c["username"] in ativos_ed]
+    parados_c = len(todos_cands) - len(cands)
     limiares = {}
     porniv_c = defaultdict(set)
     for c in cands:
@@ -389,6 +398,7 @@ def prepara(perfis, ufs, gerado, areas=None, estat=None, extras=None,
         # quantos. Mandar o número faria a página publicar, no HTML, o volume
         # de sanção da comunidade — e com o total do painel ao lado, a razão.
         "temOmitidos": bool(estat.get("candidatosOmitidos")),
+        "parados": parados_c,
         "foraDoRanking": estat.get("candidatosForaDoRanking") or 0,
         # níveis cujo limiar é o mesmo para todo mundo, então dá para citar
         "limiares": sorted(limiares.items()),
@@ -748,9 +758,15 @@ PAGE = r"""<!doctype html>
 
   /* duas listas lado a lado dentro de um painel largo; empilham no estreito */
   .duplo { display:grid; gap:18px 24px;
-           grid-template-columns:repeat(auto-fit,minmax(260px,1fr)) }
+           grid-template-columns:repeat(auto-fit,minmax(300px,1fr)) }
   .duplo h3 { font-size:.78rem; margin:0 0 8px; text-transform:uppercase;
               letter-spacing:.05em; color:var(--muted); font-weight:600 }
+  /* Nome longo empurrava a coluna de progresso para fora do painel, cortando
+     o número. O nome trunca; o selo de UF e o progresso ficam sempre visíveis,
+     e o nome inteiro continua no title da célula. */
+  .duplo td:first-child { white-space:nowrap }
+  .duplo td:first-child a { display:inline-block; max-width:7rem;
+    overflow:hidden; text-overflow:ellipsis; vertical-align:bottom }
 
   footer { margin-top:24px; color:var(--muted); font-size:.8rem }
   footer p { margin:.45em 0 }
@@ -1272,7 +1288,7 @@ function paineis() {
   const nv = p.candidatos;
   if (nv && (nv.totalProntos || nv.totalQuase)) {
     const linhas = (arr, pronto) => arr.map(([u, uf, lv, alvo, pct, ed, lim]) => `<tr>
-      <td>${link(u)} <span class="chip">${uf || "--"}</span></td>
+      <td title="${esc(u)}">${link(u)} <span class="chip">${uf || "--"}</span></td>
       <td class="num" title="${lv ? "Está no nível " + lv + " e é candidato ao nível " + alvo + "." : "Nível não informado."}">${lv ? "N" + lv + "→N" + alvo : "--"}</td>
       <td class="num${pronto ? " up" : ""}" title="${lim
         ? NF.format(ed) + " de " + NF.format(lim) + " edições — o limiar deste nível é o mesmo para todo mundo nesta coleta."
@@ -1305,8 +1321,12 @@ function paineis() {
            Nos demais níveis ele muda de pessoa para pessoa, e o que entra nessa
            conta não vem no dado — por isso a página não diz quanto falta`
         : ", e o que entra nessa conta não vem no dado"}.
-      ${nv.foraDoRanking ? `<b>${NF.format(nv.foraDoRanking)}</b> destes editores não
-        apareciam em ranking nenhum e entraram no placar por esta lista.` : ""}
+      Só entram candidatos que editaram nos últimos ${D.cfg.janela} dias${
+        nv.parados ? `: outros <b>${NF.format(nv.parados)}</b> estão na lista do
+        Waze com o progresso feito, mas pararam de editar` : ""}.
+      ${nv.foraDoRanking ? `A lista trouxe <b>${NF.format(nv.foraDoRanking)}</b>
+        editores que não apareciam em ranking nenhum e por ela entraram no
+        placar.` : ""}
       ${nv.temOmitidos ? "Candidatos com restrição ativa não entram nesta lista." : ""}
       </p></div>`);
   }

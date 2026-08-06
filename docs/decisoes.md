@@ -87,6 +87,18 @@ quem tenderia a continuar". A ressalva estava certa, a explicação não era
 medida — e provavelmente estava invertida, já que no Waze é o mentor que
 adiciona o afilhado (`AddMentee`). Dar a ressalva não autoriza inventar a razão.
 
+**Chamar de "a caminho" quem estava parado.** O `rankCandidates` lista quem
+bate o critério de edições acumuladas, não quem está editando — são coisas
+diferentes, e a diferença é grande: 69 dos 120 candidatos brasileiros não
+tinham nenhuma edição na janela. Pior no lugar mais visível, a coluna de quem
+está mais perto: os seis primeiros estavam todos parados, o primeiro deles a
+dez edições do próximo nível e sem editar havia meses. O painel prometia
+movimento onde não havia nenhum. Hoje só entra quem editou na janela — entre
+esses, a mediana de silêncio é de seis dias.
+
+Vale para qualquer lista que a API rotule: o rótulo dela é sobre o acumulado, o
+placar é sobre atividade. Confira em qual dos dois o painel está falando.
+
 **Quase transformar percentual em "faltam N edições".** O `fracToNextRank` do
 `rankCandidates` parece progresso em edições, e para quem sai do primeiro nível
 é mesmo: o denominador dá 3.000 cravado para todos os candidatos do mundo. A

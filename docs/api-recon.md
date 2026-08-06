@@ -197,6 +197,12 @@ número onde ele é único.
 **O estado vem por extenso**, não em ISO 3166-2 como no ranking. Daí o mapa
 `ESTADOS` no `waze.py`.
 
+**Candidato não quer dizer ativo.** O critério da lista é edição acumulada, não
+atividade recente: numa medição, 69 dos 120 candidatos brasileiros não tinham
+nenhuma edição na janela de 90 dias, incluindo os primeiros colocados em
+progresso (medido em 06/08/2026). Quem for usar a lista para falar de quem está
+subindo precisa cruzar com o vetor diário do perfil.
+
 **A lista alcança quem o ranking não alcança.** Numa coleta, 132 dos 172
 candidatos brasileiros não estavam em nenhum dos 84 rankings — a maioria de
 nível baixo, que não pontua o bastante para entrar, mas um deles com 665.733
