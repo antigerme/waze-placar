@@ -53,9 +53,11 @@ entra em dataset ou na página.
 segundo confirmado por Champ da comunidade —, e o placar é uma página de
 comunidade. Quem tem qualquer um dos dois sai da lista inteira, não
 só do campo — esconder a marca não basta, porque estar numa lista de "prestes a
-subir de nível" já diz algo sobre quem está impedido de subir. Sobra só a
-contagem, sem nome e sem motivo. Se aparecer campo novo dessa natureza, o
-padrão é remover o registro, não mascarar o campo.
+subir de nível" já diz algo sobre quem está impedido de subir. Nem a contagem
+vai para o HTML: com o total do painel ao lado, ela entregaria a proporção de
+sancionados da comunidade. A página só avisa que houve exclusão. Se aparecer
+campo novo dessa natureza, o padrão é remover o registro, não mascarar o
+campo — e não publicar quantos foram.
 
 Coordenada por pessoa também não: onde o projeto mostra posição, ele rasteriza
 numa grade de dezenas de quilômetros. É por isso que o `lastEditPoint` do

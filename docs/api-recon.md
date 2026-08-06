@@ -212,8 +212,12 @@ rotina administrativa. **Não entram em dataset nem na página.**
 Quem tem qualquer um dos dois é removido da lista inteira pelo
 `coleta_candidatos`, não só do campo: esconder a marca não bastaria, porque
 aparecer numa lista de "prestes a subir de nível" já diria algo sobre quem está
-impedido de subir. Sobrevive só a contagem de quantos saíram — sem nome e sem
-motivo.
+impedido de subir.
+
+A contagem de quantos saíram também não vai para o HTML. A página avisa que
+houve exclusão — "candidatos com restrição ativa não entram nesta lista" — e
+para por aí: publicar o número, com o total do painel ao lado, entregaria a
+proporção de sancionados da comunidade a quem não tem o endpoint.
 
 `lastEditPoint` é a coordenada da última edição de uma pessoa nomeada. Não é
 coletado: onde o projeto mapeia posição, ele rasteriza numa grade de dezenas de

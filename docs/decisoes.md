@@ -156,8 +156,8 @@ Brasil.
 | Linhas de ranking de janela sem edição | 99% |
 
 O `rankCandidates` entrou depois desta tabela, então ele tem os números dele, de
-06/08/2026: **120 candidatos brasileiros na lista, 53 omitidos** por banimento
-ou nível travado, e **90 que não apareciam em ranking nenhum**. Como esses 90
+06/08/2026: **120 candidatos brasileiros na lista** e **90 que não apareciam em
+ranking nenhum**. O total de omitidos por sanção fica aqui, não na página. Como esses 90
 passaram a entrar no universo, o total de editores da próxima execução completa
 vai nascer acima dos 2.534 desta tabela — a diferença é o endpoint novo, não
 coleta quebrada.

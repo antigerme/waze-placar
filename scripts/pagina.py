@@ -385,7 +385,10 @@ def prepara(perfis, ufs, gerado, areas=None, estat=None, extras=None,
         "quase": [_linha(c) for c in quase[:CANDIDATOS_LISTA]],
         "totalProntos": len(prontos),
         "totalQuase": len(quase),
-        "omitidos": estat.get("candidatosOmitidos") or 0,
+        # booleano, não contagem: a página avisa que houve exclusão sem dizer
+        # quantos. Mandar o número faria a página publicar, no HTML, o volume
+        # de sanção da comunidade — e com o total do painel ao lado, a razão.
+        "temOmitidos": bool(estat.get("candidatosOmitidos")),
         "foraDoRanking": estat.get("candidatosForaDoRanking") or 0,
         # níveis cujo limiar é o mesmo para todo mundo, então dá para citar
         "limiares": sorted(limiares.items()),
@@ -548,9 +551,13 @@ def prepara(perfis, ufs, gerado, areas=None, estat=None, extras=None,
             "transacoesPorEditor": waze.TRANSACOES_POR_EDITOR,
             "semAtividade": sem_atividade,
         },
-        # a lista crua de candidatos já virou painel; mandá-la de novo aqui
-        # dobraria o peso dela na página sem ninguém ler
-        "estat": {k: v for k, v in estat.items() if k != "candidatos"},
+        # A lista crua de candidatos já virou painel; mandá-la de novo aqui
+        # dobraria o peso dela sem ninguém ler. E `candidatosOmitidos` é a
+        # contagem de quem está sob sanção: a página avisa que houve exclusão,
+        # mas o número não entra no HTML — com o total do painel ao lado, ele
+        # daria a proporção de sancionados da comunidade.
+        "estat": {k: v for k, v in estat.items()
+                  if k not in ("candidatos", "candidatosOmitidos")},
         "resumo": {
             "ativos30": ativos30,
             "ativos90": len(abas["d90"]),
@@ -1300,8 +1307,7 @@ function paineis() {
         : ", e o que entra nessa conta não vem no dado"}.
       ${nv.foraDoRanking ? `<b>${NF.format(nv.foraDoRanking)}</b> destes editores não
         apareciam em ranking nenhum e entraram no placar por esta lista.` : ""}
-      ${nv.omitidos ? `Outros <b>${NF.format(nv.omitidos)}</b> candidatos não entram
-        nesta lista.` : ""}
+      ${nv.temOmitidos ? "Candidatos com restrição ativa não entram nesta lista." : ""}
       </p></div>`);
   }
 
