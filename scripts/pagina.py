@@ -1243,11 +1243,15 @@ function cidadesEtipos(a) {
     O Waze só nomeia a cidade em ${Math.round(100 * a.comCidade / a.edicoes)}% das
     edições; as demais entram no mapa mas não nesta lista.</p></div>
     <div class="painel"><h2>O que está sendo mexido</h2>
-    ${barras(a.tipos.slice(0, 8).map(([k, v]) => [ROT[k] || k, v]),
-             (v) => Math.round(100 * v / totTipos) + "%",
-             (k, v) => NF.format(v) + " operações do tipo " + k +
-                       ", que é " + Math.round(100 * v / totTipos) +
-                       "% de tudo que foi tocado nas edições recentes.")}
+    ${(() => {
+      // arredondar para zero um tipo que existe deixava barra desenhada com
+      // rótulo "0%", que parece defeito; abaixo de meio ponto o texto vira "<1%"
+      const pc = (v) => { const x = 100 * v / totTipos;
+        return x > 0 && x < 1 ? "<1%" : Math.round(x) + "%"; };
+      return barras(a.tipos.slice(0, 8).map(([k, v]) => [ROT[k] || k, v]), pc,
+        (k, v) => NF.format(v) + " operações do tipo " + k + ", que é " +
+                  pc(v) + " de tudo que foi tocado nas edições recentes.");
+    })()}
     <p style="color:var(--muted);font-size:.8rem;margin:10px 0 0">
     Operações das edições recentes, por tipo de objeto tocado. É o trabalho dos
     últimos dias, não o acumulado de carreira que aparece nos selos da
