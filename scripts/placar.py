@@ -99,10 +99,23 @@ def main() -> None:
     ufs = {e["username"]: e["uf"] for e in editores}
 
     if args.perfis:
-        perfis = [json.loads(l) for l in Path(args.perfis).open(encoding="utf-8")]
+        origem = Path(args.perfis)
+        perfis = [json.loads(l) for l in origem.open(encoding="utf-8")]
         perfis = [p for p in perfis if p["username"] in ufs]
         if not args.quiet:
             print("{} perfis lidos de {}".format(len(perfis), args.perfis),
+                  file=sys.stderr)
+        # O vetor diário do perfil é ancorado no dia em que foi buscado, e a
+        # página ancora no dia de hoje. Reusando um JSONL de ontem, o ritmo
+        # semanal e as datas do calendário saem deslocados — sem erro nenhum,
+        # só errados. Já enganou aqui: um arquivo de quatro dias trocou o fim
+        # de semana de mais fraco para mais forte.
+        atraso = (dt.date.today()
+                  - dt.date.fromtimestamp(origem.stat().st_mtime)).days
+        if atraso > 0:
+            print("  aviso: {} tem {} dia(s). O ritmo semanal e o calendário "
+                  "saem deslocados nesse tanto — serve para mexer no layout, "
+                  "não para publicar.".format(args.perfis, atraso),
                   file=sys.stderr)
     elif args.sem_perfis:
         # Sem atividade diária: a página mostra só o acumulado.

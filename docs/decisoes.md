@@ -122,6 +122,14 @@ e o auditor só procurava transbordo. Hoje ele compara a largura que o CSS pede
 com a que o navegador pinta, em toda barra da página. Foi um leitor que viu,
 não a ferramenta.
 
+**Reusar perfis de outro dia e ler o resultado como se fosse de hoje.** O
+`--perfis` existe para não recoletar o universo a cada mudança de layout, e
+funciona — só que o vetor diário vem ancorado no dia da coleta enquanto a
+página ancora em `date.today()`. Com um JSONL de quatro dias, o ritmo semanal
+apareceu com o fim de semana mais forte que o dia útil, o oposto do que a
+coleta do dia mostrava. Não deu erro, não pareceu errado: só estava. Hoje o
+`placar.py` avisa quando o arquivo não é do dia.
+
 **Auditar layout com número de brinquedo.** O `auditar-layout.mjs` passava
 porque a página de teste tinha KPI de cinco dígitos. Com o total real, de oito,
 o cartão vazava em 390 e 768px. A auditoria só enxerga o que está na página que

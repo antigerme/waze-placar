@@ -96,6 +96,12 @@ python3 scripts/placar.py --limit 20              # amostra
 Guarde a coleta num JSONL e reuse. Recoletar o universo inteiro para testar
 mudança de layout é desperdício.
 
+**Só não publique de JSONL velho.** O vetor diário do perfil é ancorado no dia
+em que foi buscado, e a página ancora no dia de hoje: reusando um arquivo de
+ontem, o ritmo semanal e as datas do calendário saem deslocados, sem erro
+nenhum e sem parecer errado. O `placar.py` avisa quando o arquivo não é de
+hoje. Para layout serve; para publicar, recolete.
+
 ## Cuidado com os cookies
 
 O script **grava** `/tmp/cookies.txt`, não só lê — é assim que a sessão se
