@@ -153,6 +153,22 @@ acusou nome preto sobre fundo branco com 1,3:1, porque lia `color-mix` — que o
 Chromium devolve como `color(srgb 0.93 …)`, de 0 a 1 — na mesma escala de
 `rgb()`, de 0 a 255. Medidor errado é pior que nenhum.
 
+**Ordenar "a caminho do próximo nível" pelo acumulado.** As duas listas do
+painel nasceram assim: "mais perto de chegar" por `fracToNextRank`, "já
+chegaram" por nível e edições de carreira. Acumulado é o que já foi feito, e o
+que já foi feito não vence quando a pessoa parou. Medido em 06/08/2026: dos
+doze de "mais perto de chegar", nove levariam mais de 730 dias para bater o
+limiar no ritmo dos últimos 90 dias, e o primeiro colocado tinha 99% de
+progresso com três edições na janela inteira. Quem chegaria em três semanas
+não aparecia.
+Foi um editor da comunidade que reclamou, citando dois nomes da lista que já
+tinham largado o Waze; o número acima veio depois, para conferir a reclamação.
+Hoje as duas listas ordenam por atividade — quem já chegou, pelas edições da
+janela; quem falta, pelo que falta dividido pelo ritmo medido — e trocaram nove
+dos doze nomes. É o mesmo erro que o placar inteiro existe para não cometer, e
+foi cometido dentro dele. O `verificar.py` monta o painel com quatro
+sintéticos em que as duas ordens são opostas e falha se a antiga voltar.
+
 **Auditar layout com número de brinquedo.** O `auditar-layout.mjs` passava
 porque a página de teste tinha KPI de cinco dígitos. Com o total real, de oito,
 o cartão vazava em 390 e 768px. A auditoria só enxerga o que está na página que

@@ -66,6 +66,11 @@ média da aba. São linhas de referência, não pessoas: sem posição, sem selo
 sem link. Acompanham o filtro de estado e a busca, e somem quando sobra pouca
 gente na tela para o valor significar algo.
 
+Em "A caminho do próximo nível" a ordem é atividade, não acumulado: quem já
+bateu o limiar aparece por edições da janela, e quem ainda não, pelo prazo que
+o ritmo da janela daria — o que falta dividido pela produção diária. Ordenado
+por progresso, o painel punha no topo quem tinha 99% feito e havia parado.
+
 Tema claro e escuro: sem escolha feita a página segue o sistema, e o botão no
 canto superior fixa uma das duas. A escolha fica no `localStorage` do próprio
 navegador — a página continua estática, sem servidor e sem estado do lado de
