@@ -242,6 +242,28 @@ Se o gradiente perder o formato — N1 alto, N6 baixo, ou saltos grandes no meio
 
 ---
 
+## Conferido, e não é problema
+
+Coisas que dariam um bom susto se estivessem erradas e por isso foram medidas.
+Estão aqui para ninguém gastar o tempo de novo — e para saber o que refazer se
+o código mudar.
+
+**Nome de editor não injeta HTML.** Nome, cidade e tipo de objeto vêm da API e
+são escolhidos por quem se cadastra. Montando a página com nomes como
+`<img src=x onerror=…>` e `</script><script>…`, nada executa: tudo sai como
+texto literal, o link vai percent-encoded, e a página não ganha nenhuma tag
+`img` ou `script` a mais. Se algum trecho novo montar HTML sem passar pelo
+`esc()`, refaça este teste.
+
+**A página não fala com ninguém.** Nenhuma requisição sai para fora ao abrir,
+trocar de aba, filtrar ou trocar de tema: nada de fonte remota, analytics ou
+CDN. Só fontes de sistema. Vale conferir de novo se alguém adicionar biblioteca.
+
+**Teclado e leitor de tela.** A ordem do Tab é a visual, todo controle tem foco
+visível e nome acessível, e Enter aciona abas e o botão de tema.
+
+---
+
 ## Não explorado
 
 **Áreas de editores inativos.** Hoje só os ativos têm `Areas` coletada, então o
