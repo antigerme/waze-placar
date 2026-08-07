@@ -736,9 +736,12 @@ PAGE = r"""<!doctype html>
   .barra { display:grid; grid-template-columns:minmax(2.4rem,max-content) 1fr auto;
            gap:10px; align-items:center; margin:5px 0; font-size:.85rem }
   /* o rótulo cresce até um teto e então corta com reticências; o texto inteiro
-     continua no title da barra. Sem isso, nome de cidade invade o gráfico. */
-  .barra span:first-child { color:var(--muted); max-width:8rem; white-space:nowrap;
-                            overflow:hidden; text-overflow:ellipsis }
+     continua no title da barra. Sem isso, nome de cidade invade o gráfico.
+     O `>` não é decoração: sem ele o seletor também pegava a barra azul, que é
+     o primeiro filho do trilho, e travava todo gráfico em 8rem — acima de uns
+     dois terços, valores diferentes desenhavam do mesmo tamanho. */
+  .barra > span:first-child { color:var(--muted); max-width:8rem; white-space:nowrap;
+                              overflow:hidden; text-overflow:ellipsis }
   .barra .t { background:var(--grid); border-radius:4px; height:9px }
   .barra .f { background:var(--series); border-radius:4px; height:9px;
               min-width:2px }

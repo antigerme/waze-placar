@@ -59,6 +59,25 @@ for (const largura of LARGURAS) {
       }
     });
 
+    // A barra tem que desenhar o que diz desenhar. Um seletor sem `>` já
+    // aplicou o max-width do rótulo à barra azul e travou todo gráfico em
+    // 8rem: acima de dois terços, valores diferentes saíam do mesmo tamanho.
+    // Nada disso estoura layout, então só comparando pedido com pintado.
+    out.barras = [];
+    document.querySelectorAll('.barra').forEach((br) => {
+      const t = br.querySelector('.t'), f = br.querySelector('.f');
+      if (!t || !f) return;
+      const pedido = parseFloat(f.style.width);
+      const larg = t.getBoundingClientRect().width;
+      if (!isFinite(pedido) || !larg) return;
+      const real = (100 * f.getBoundingClientRect().width) / larg;
+      if (Math.abs(real - pedido) > 2) {
+        out.barras.push(
+          (br.querySelector('span') || {}).textContent.trim().slice(0, 14) +
+          ' pede ' + pedido.toFixed(0) + '% e pinta ' + real.toFixed(0) + '%');
+      }
+    });
+
     // Decimal com ponto numa página em português. Em pt-BR o ponto é separador
     // de milhar, então "1.690.773" está certo e "67.2%" está errado: o que
     // denuncia é o ponto seguido de menos de três dígitos. Já escapou um
@@ -74,13 +93,16 @@ for (const largura of LARGURAS) {
   });
 
   const ok = !r.overflowPagina && !r.rolagem.length && !r.vazando.length &&
-             !r.decimais.length && !erros.length;
+             !r.decimais.length && !r.barras.length && !erros.length;
   if (!ok) problemas++;
   console.log(largura + 'px  ' + (ok ? 'ok' : 'PROBLEMA'));
   if (r.overflowPagina) console.log('   página rola lateralmente');
   if (r.rolagem.length) console.log('   com rolagem:', [...new Set(r.rolagem)].join(', '));
   if (r.vazando.length) {
     console.log('   vazando do painel:', [...new Set(r.vazando)].slice(0, 6).join(' | '));
+  }
+  if (r.barras.length) {
+    console.log('   barra desenhando errado:', [...new Set(r.barras)].slice(0, 4).join(' | '));
   }
   if (r.decimais.length) {
     console.log('   ponto decimal em página pt-BR:',

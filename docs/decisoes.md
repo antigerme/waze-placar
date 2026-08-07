@@ -108,6 +108,20 @@ Medindo, o denominador do segundo nível em diante muda de pessoa para pessoa �
 payload. Hoje o script mede o limiar por nível e só cita o número onde ele é
 único; nos outros mostra o percentual e diz que não sabe quanto falta.
 
+**Seletor CSS sem `>` estragando todo gráfico de barra.** A regra que trunca o
+rótulo comprido — criada para nome de cidade não invadir o gráfico — era
+`.barra span:first-child`. Sem o `>`, ela casa qualquer span que seja primeiro
+filho **dentro** da barra, e a barra azul é o primeiro filho do trilho. Todo
+gráfico ficou com teto de 8rem: acima de uns dois terços, valores diferentes
+desenhavam do mesmo tamanho. O ritmo semanal mostrava os sete dias iguais com
+205 mil e 279 mil edições lado a lado, e o top 100 da concentração pintava 66%
+dizendo 98%.
+
+Passou meses assim porque nada estourava: a barra desenhava *menos*, não mais,
+e o auditor só procurava transbordo. Hoje ele compara a largura que o CSS pede
+com a que o navegador pinta, em toda barra da página. Foi um leitor que viu,
+não a ferramenta.
+
 **Auditar layout com número de brinquedo.** O `auditar-layout.mjs` passava
 porque a página de teste tinha KPI de cinco dígitos. Com o total real, de oito,
 o cartão vazava em 390 e 768px. A auditoria só enxerga o que está na página que

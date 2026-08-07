@@ -188,8 +188,8 @@ servem de canário — e o que ainda não foi explorado.
 
 `scripts/auditar-layout.mjs` abre a página gerada num navegador em quatro
 larguras e falha se algo rolar lateralmente, vazar do painel, soltar erro de JS
-no console ou mostrar número com ponto decimal — que numa página em português é
-sempre defeito. Precisa de `npm i playwright`. Vale rodar depois de mexer no
+no console, mostrar número com ponto decimal — que numa página em português é
+sempre defeito — ou desenhar uma barra de tamanho diferente do que o CSS pediu. Precisa de `npm i playwright`. Vale rodar depois de mexer no
 `pagina.py`: validar por métrica no Python deixou passar uma tabela que
 estourava em todas as larguras, e um KPI escrito "67.2%".
 
