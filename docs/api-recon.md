@@ -266,6 +266,18 @@ a anterior gravou.
 fixo na data em que a sessão nasceu no navegador, cerca de 30 dias. O que a
 rotação sustenta é o tempo ocioso do servidor, curto.
 
+**401 não é sinônimo de prazo vencido.** Um `_web_session` com validade a um
+mês de distância pode ser recusado em todo endpoint. Comparados lado a lado dois
+exports do mesmo dia, de navegadores diferentes: um respondia 500 linhas, o
+outro levava 401 em tudo. A diferença não estava no formato nem nos cookies
+presentes — o do Chrome funciona até sem o cookie `_t`, que o do Firefox não
+tinha — e sim no próprio token. Sessões coexistem: rolar o token no Descartes
+não invalida o anterior, e o token rolado continua valendo no `/_user/api`.
+Também testado: gravar o jar de volta não perde cookie nenhum.
+
+Ou seja, quando o Waze recusa, o que resta é exportar de um navegador onde a
+conta esteja logada naquele instante.
+
 **Os dois backends expiram em ritmos diferentes.** Já foi observado o ranking
 respondendo 200 enquanto todo perfil devolvia 403 com
 `"This operation is not allowed by guest user"`. Tratar 403 como "sessão morta"

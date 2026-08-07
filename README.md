@@ -150,8 +150,24 @@ data em que a sessão nasceu no navegador, cerca de 30 dias. O que a renovação
 sustenta é o tempo ocioso do servidor, bem mais curto, que é o que fazia os
 perfis passarem a responder 403 depois de algumas horas.
 
-Na prática: rodando todo dia, espere semanas sem reexportar, e uma reexportação
-manual quando o prazo absoluto vencer. `--nao-salvar-cookies` desliga isso.
+Quanto isso dura na prática **não foi medido ao longo de dias** — a verificação
+acima foi de execuções seguidas, não de uma semana de cron. Se um dia amanhecer
+com 401, o mais rápido é conferir antes de investigar:
+
+```bash
+python3 scripts/placar.py --conferir
+```
+
+Uma requisição, resposta em segundos. `--nao-salvar-cookies` desliga a
+regravação.
+
+**401 não quer dizer prazo vencido.** Medido: o `_web_session` pode ter validade
+a um mês de distância e a sessão já não valer. Exportar de um navegador onde a
+conta não está logada naquele momento produz um arquivo com a cara certa e um
+token morto — foi o que aconteceu aqui, com um export de um navegador e outro,
+lado a lado, um funcionando e o outro não. Também medido: sessões diferentes
+coexistem, então entrar no site por outro navegador não derruba a do servidor,
+e a rolagem do Descartes não invalida o token para o `/_user/api`.
 
 Como o arquivo virou credencial que precisa sobreviver a reinício, vale tirá-lo
 de `/tmp` — algo como `/etc/waze-placar/cookies.txt`, com `--cookies` apontando

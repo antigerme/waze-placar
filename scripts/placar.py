@@ -50,6 +50,22 @@ def write_atomic(path: Path, text: str) -> None:
         raise
 
 
+# O que dizer quando o Waze recusa a sessão. Antes daqui saía "sessão
+# expirada, atualize os cookies", que manda reexportar — e reexportar não
+# resolve quando o problema é outro. Medido neste projeto: o prazo do cookie
+# pode estar a um mês de distância e o token já não valer; exportar de um
+# navegador onde a conta não está logada agora produz um arquivo com a cara
+# certa e uma sessão morta; e sessões diferentes coexistem, então a do servidor
+# não morre porque alguém entrou no site por outro navegador.
+SESSAO_RECUSADA = (
+    "O Waze recusou a sessão. Isso não quer dizer que o cookie venceu — o prazo\n"
+    "dele pode estar longe e a sessão já não valer.\n"
+    "  - Exporte de um navegador com o waze.com aberto e logado AGORA.\n"
+    "  - Confira que o arquivo tem o cookie _web_session de www.waze.com.\n"
+    "  - Teste em um segundo, sem gastar uma coleta inteira:\n"
+    "      python3 scripts/placar.py --cookies {} --conferir")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -73,6 +89,8 @@ def main() -> None:
                     help="pula áreas gerenciadas e edições recentes "
                          "(~600 requisições a menos)")
     ap.add_argument("--quiet", action="store_true")
+    ap.add_argument("--conferir", action="store_true",
+                    help="testa a sessão numa requisição e sai; não publica nada")
     args = ap.parse_args()
 
     inicio = time.time()
@@ -82,12 +100,25 @@ def main() -> None:
     if not args.nao_salvar_cookies:
         atexit.register(lambda: waze.salva_cookies(opener))
 
+    if args.conferir:
+        # uma requisição, resposta em segundos: serve para saber se vale a pena
+        # disparar uma coleta de dezenas de minutos
+        try:
+            d = waze.fetch(opener, waze.LEADERBOARD,
+                           {"lookbackPeriod": "ALL_TIME", "countryCode": "BR"},
+                           "https://www.waze.com/leaderboard")
+        except waze.SemPermissao as exc:
+            sys.exit("{}\n{}".format(exc, SESSAO_RECUSADA.format(args.cookies)))
+        print("sessão boa: o ranking respondeu com {} linhas".format(
+            len(d.get("record") or [])), file=sys.stderr)
+        return
+
     if not args.quiet:
         print("varrendo os rankings (28 por janela, 3 janelas)…", file=sys.stderr)
     try:
         editores, falhas, estat = waze.universo(opener, quiet=args.quiet)
     except waze.SemPermissao as exc:
-        sys.exit("{} — sessão expirada. Atualize {}.".format(exc, args.cookies))
+        sys.exit("{}\n{}".format(exc, SESSAO_RECUSADA.format(args.cookies)))
     if falhas and not args.allow_partial:
         sys.exit(
             "{} ranking(s) não responderam: {}\nNada foi publicado — a página "
