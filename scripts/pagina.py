@@ -838,8 +838,9 @@ PAGE = r"""<!doctype html>
 
   <div class="tabs" id="tabs" role="tablist" aria-label="Janela de tempo"></div>
   <div class="controls">
-    <input id="q" type="search" placeholder="Procurar editor…" autocomplete="off">
-    <select id="uf"></select>
+    <input id="q" type="search" placeholder="Procurar editor…" autocomplete="off"
+           aria-label="Procurar editor pelo nome">
+    <select id="uf" aria-label="Filtrar por estado"></select>
   </div>
 
   <div class="tablewrap" id="painelTabela" role="tabpanel"
