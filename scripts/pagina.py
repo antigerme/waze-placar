@@ -32,6 +32,11 @@ CAL_DESVIOS = 2       # desvios da mediana para o dia entrar como fora da curva
 CONC_FAIXAS = (5, 10, 25, 50, 100)   # cortes do painel de concentração
 CONC_KPI = 50         # qual dos cortes vira KPI; precisa estar em CONC_FAIXAS
 CANDIDATOS_LISTA = 12  # linhas do painel de quem está subindo de nível
+# Até quando faz sentido estimar quanto falta para o próximo nível. Além disso
+# o texto diz que está longe, sem número: projetar anos a partir de noventa
+# dias de ritmo seria dar precisão que o dado não tem.
+RITMO_HORIZONTE = 730  # dias
+RITMO_EM_SEMANAS = 60  # abaixo disto o prazo sai em semanas, não em meses
 REF_MIN = 10          # linhas na tela para as réguas da tabela significarem algo
 # Teto de linhas desenhadas de uma vez. Não é enfeite: a aba do histórico tem
 # milhares de editores, e cada linha vira mais de dez nós. Num celular modesto,
@@ -390,15 +395,35 @@ def prepara(perfis, ufs, gerado, areas=None, estat=None, extras=None,
     for lv, vals in porniv_c.items():
         if len(vals) == 1:
             limiares[lv] = vals.pop()
-    prontos = sorted((c for c in cands if c["frac"] >= 1),
-                     key=lambda c: (-(c.get("level") or 0), -c["edits"]))
-    quase = sorted((c for c in cands if c["frac"] < 1), key=lambda c: -c["frac"])
+    # Quanto falta, no ritmo de quem está listado. O limiar sai da própria
+    # razão que o Waze devolve — edições dividido por progresso —, e o ritmo do
+    # vetor diário. Ordenar por progresso sozinho premiava o acumulado: o
+    # primeiro da lista tinha 99% e três edições em noventa dias, enquanto quem
+    # chegava em três semanas aparecia abaixo. É o mesmo erro que o placar
+    # inteiro existe para não cometer.
+    por_nome = {e["u"]: e for e in eds}
+    for c in cands:
+        d90 = (por_nome.get(c["username"]) or {}).get("d90") or 0
+        limiar = c["edits"] / c["frac"] if c["frac"] else 0
+        faltam = max(0.0, limiar - c["edits"])
+        ritmo = d90 / JANELA
+        # arredonda, não trunca: 2400 dividido por 0,8 não dá 3000 exato em
+        # ponto flutuante, e truncar transformava 60 dias em 59 — o bastante
+        # para o rótulo pular de meses para semanas por ruído de arredondamento
+        c["dias"] = int(round(faltam / ritmo)) if ritmo else None
+        c["d90"] = d90
+
+    # quem já chegou não tem prazo a estimar; ordena por quem está mais presente
+    prontos = sorted((c for c in cands if c["frac"] >= 1), key=lambda c: -c["d90"])
+    quase = sorted((c for c in cands if c["frac"] < 1),
+                   key=lambda c: (c["dias"] is None, c["dias"], -c["d90"]))
+
     def _linha(c):
         # trunca em vez de arredondar: com 99,9% arredondado, quem ainda não
         # chegou aparecia com "100%" na lista de quem ainda não chegou
         return [c["username"], c["uf"], c.get("level"), c.get("alvo"),
                 int(100 * c["frac"]), c["edits"],
-                limiares.get(c.get("level"))]
+                limiares.get(c.get("level")), c["dias"], c["d90"]]
     candidatos = {
         "prontos": [_linha(c) for c in prontos[:CANDIDATOS_LISTA]],
         "quase": [_linha(c) for c in quase[:CANDIDATOS_LISTA]],
@@ -571,6 +596,8 @@ def prepara(perfis, ufs, gerado, areas=None, estat=None, extras=None,
             "mentoriaCobertura": MENTORIA_COBERTURA,
             "refMin": REF_MIN,
             "linhasMax": LINHAS_MAX,
+            "ritmoHorizonte": RITMO_HORIZONTE,
+            "ritmoEmSemanas": RITMO_EM_SEMANAS,
             "baldes": BUCKETS,
             "baldeDias": BUCKET_DIAS,
             "tendBanda": TEND_BANDA,
@@ -805,6 +832,17 @@ PAGE = r"""<!doctype html>
   /* duas listas lado a lado dentro de um painel largo; empilham no estreito */
   .duplo { display:grid; gap:18px 24px;
            grid-template-columns:repeat(auto-fit,minmax(300px,1fr)) }
+  /* Lado a lado, cada metade fica com menos de um terço da largura da página.
+     Medido: com quatro colunas a tabela pedia 395px numa célula de 321px e
+     invadia a lista vizinha. Quem tem quatro colunas empilha e usa a largura
+     inteira do painel. */
+  .duplo.empilha { grid-template-columns:1fr }
+  /* No celular nem a largura inteira do painel basta: a tabela pedia 389px em
+     364px. Aperta o respiro das células e o teto do nome, em vez de rolar. */
+  @media (max-width:560px) {
+    .duplo.empilha td, .duplo.empilha th { padding:5px 4px }
+    .duplo.empilha td:first-child a { max-width:5.5rem }
+  }
   .duplo h3 { font-size:.78rem; margin:0 0 8px; text-transform:uppercase;
               letter-spacing:.05em; color:var(--muted); font-weight:600 }
   /* Nome longo empurrava a coluna de progresso para fora do painel, cortando
@@ -1458,20 +1496,49 @@ function paineis() {
   const mt = p.mentoria;
   const nv = p.candidatos;
   if (nv && (nv.totalProntos || nv.totalQuase)) {
-    const linhas = (arr, pronto) => arr.map(([u, uf, lv, alvo, pct, ed, lim]) => `<tr>
+    // Conversão de calendário, só para o rótulo caber na coluna. Os dois
+    // valores que decidem qual formato usar são limiares e vêm do cfg.
+    const DIAS_SEM = 7, DIAS_MES = 30;
+    const prazo = (d) => {
+      if (d === null || d === undefined) return "--";
+      if (d > C.ritmoHorizonte) return "longe";
+      if (d < C.ritmoEmSemanas) return "~" + Math.max(1, Math.round(d / DIAS_SEM)) + " sem";
+      const n = Math.max(1, Math.round(d / DIAS_MES));
+      return "~" + n + (n === 1 ? " mês" : " meses");
+    };
+    const ritmoAjuda = (a) => NF.format(a) + " edições nos últimos " + C.janela
+      + " dias. Esta lista está ordenada por isto.";
+    const prazoAjuda = (d, a) => d === null || d === undefined
+      ? "Sem edição na janela, não há ritmo para projetar."
+      : d > C.ritmoHorizonte
+        ? "Mantido o ritmo de " + NF.format(a) + " edições em " + C.janela
+          + " dias, chegar ao limiar passaria de " + NF.format(C.ritmoHorizonte)
+          + " dias. A página não projeta além disso."
+        : "Mantido o ritmo de " + NF.format(a) + " edições em " + C.janela
+          + " dias, o que falta até o limiar sai em cerca de " + NF.format(d)
+          + " dias. É projeção a ritmo constante, não previsão.";
+    const progAjuda = (pronto, ed, lim) => pronto
+      ? NF.format(ed) + " edições no total"
+        + (lim ? ", contra o limiar de " + NF.format(lim) + " deste nível" : "")
+        + " — já está no limiar ou acima."
+      : lim
+        ? NF.format(ed) + " de " + NF.format(lim) + " edições — o limiar deste nível é o mesmo para todo mundo nesta coleta."
+        : NF.format(ed) + " edições. O limiar deste nível não é o mesmo para todo mundo, então a página não cita quantas edições faltam.";
+    const linhas = (arr, pronto) => arr.map(([u, uf, lv, alvo, pct, ed, lim, dias, d90]) => `<tr>
       <td title="${esc(u)}">${link(u)} <span class="chip">${uf || "--"}</span></td>
       <td class="num" title="${lv ? "Está no nível " + lv + " e é candidato ao nível " + alvo + "." : "Nível não informado."}">${lv ? "N" + lv + "→N" + alvo : "--"}</td>
-      <td class="num${pronto ? " up" : ""}" title="${lim
-        ? NF.format(ed) + " de " + NF.format(lim) + " edições — o limiar deste nível é o mesmo para todo mundo nesta coleta."
-        : NF.format(ed) + " edições. O limiar deste nível não é o mesmo para todo mundo, então a página não diz quanto falta."}">${pronto ? "✓" : pct + "%"}</td>
+      <td class="num${pronto ? " up" : ""}" title="${progAjuda(pronto, ed, lim)}">${pronto ? "✓" : pct + "%"}</td>
+      <td class="num" title="${pronto ? ritmoAjuda(d90) : prazoAjuda(dias, d90)}">${
+        pronto ? NF.format(d90) : prazo(dias)}</td>
       </tr>`).join("");
     blocos.push(`<div class="painel largo"><h2>A caminho do próximo nível</h2>
-      <div class="duplo">
+      <div class="duplo empilha">
       <div><h3>Já chegaram ao limiar</h3>
       ${nv.totalProntos ? `<table><thead><tr>
         <th title="Editor que o Waze lista como candidato e que já atingiu o limiar do próximo nível.">Editor</th>
         <th class="num" title="Nível atual e o nível a que é candidato.">Nível</th>
         <th class="num" title="Progresso que o Waze calcula até o próximo nível. O visto marca quem já está no limiar ou acima.">Progr.</th>
+        <th class="num" title="Edições nos últimos ${C.janela} dias. Entre quem já está no limiar, aparece primeiro quem segue editando mais.">${C.janela} dias</th>
         </tr></thead><tbody>${linhas(nv.prontos, true)}</tbody></table>`
         : `<p style="color:var(--muted)">Ninguém no limiar agora.</p>`}</div>
       <div><h3>Mais perto de chegar</h3>
@@ -1479,6 +1546,7 @@ function paineis() {
         <th title="Editor que o Waze lista como candidato e ainda não atingiu o limiar.">Editor</th>
         <th class="num" title="Nível atual e o nível a que é candidato.">Nível</th>
         <th class="num" title="Progresso que o Waze calcula até o próximo nível.">Progr.</th>
+        <th class="num" title="Quanto levaria até o limiar mantendo o ritmo dos últimos ${C.janela} dias. Esta lista está ordenada por isto. Acima de ${C.ritmoHorizonte} dias a página só diz que está longe.">No ritmo</th>
         </tr></thead><tbody>${linhas(nv.quase, false)}</tbody></table>`
         : `<p style="color:var(--muted)">Ninguém abaixo do limiar agora.</p>`}</div>
       </div>
@@ -1490,8 +1558,13 @@ function paineis() {
            candidatos ${nv.limiares.map(([lv, v]) =>
              "do nível " + lv + " (" + NF.format(v) + " edições)").join(" e ")}.
            Nos demais níveis ele muda de pessoa para pessoa, e o que entra nessa
-           conta não vem no dado — por isso a página não diz quanto falta`
+           conta não vem no dado — por isso a página não cita quantas edições
+           faltam`
         : ", e o que entra nessa conta não vem no dado"}.
+      As duas listas são ordenadas por atividade, não por acumulado: quem já
+      chegou, pelas edições da janela; quem ainda não, pelo prazo que o ritmo da
+      janela daria. Esse prazo é o que falta até o limiar dividido pelo ritmo
+      medido, e vale enquanto o ritmo valer — é projeção, não previsão.
       Só entram candidatos que editaram nos últimos ${D.cfg.janela} dias${
         nv.parados ? `: outros <b>${NF.format(nv.parados)}</b> estão na lista do
         Waze com o progresso feito, mas pararam de editar` : ""}.

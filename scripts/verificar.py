@@ -280,6 +280,40 @@ try:
     for _const in sorted(set(re.findall(r"\bpagina\.([A-Z_]+)\b", _placar))):
         if not hasattr(_pag, _const):
             erro("monta", "placar.py usa pagina.{}, que não existe".format(_const))
+
+    # O painel de quem está subindo de nível ordena por atividade, não pelo
+    # progresso acumulado. Voltar a ordenar por progresso é fácil e silencioso:
+    # a página continua montando, só põe no topo quem parou de editar há meses.
+    # Os quatro sintéticos abaixo têm as duas ordens invertidas de propósito.
+    _quentes = {"activity": [10] * _pag.VETOR, "firstEditDate": 1400000000000}
+    _frios = {"activity": [1] + [0] * (_pag.VETOR - 1),
+              "firstEditDate": 1400000000000}
+    _cands = [
+        # nome           frac  edições  quanto falta / ritmo  = ordem esperada
+        ("quase-ativo",  0.80,   2400,  _quentes),   # 600 a 10/dia
+        ("quase-parado", 0.99,   2970,  _frios),     # 30 a 1/90 por dia
+        ("feito-ativo",  1.10,   3300,  _quentes),
+        ("feito-parado", 1.20,   3600,  _frios),
+    ]
+    _dados = _pag.prepara(
+        [dict(_perf, username=_n, level=1, edits=_e, userId=_n)
+         for _n, _f, _e, _perf in _cands],
+        dict((_n, "BR-SP") for _n, _f, _e, _p in _cands),
+        "01/01/2000 00:00 UTC",
+        estat={"candidatos": [
+            {"username": _n, "level": 1, "alvo": 2, "frac": _f, "edits": _e,
+             "uf": "SP"} for _n, _f, _e, _p in _cands]})
+    _nv = _dados["paineis"]["candidatos"]
+    for _lista, _esperado in (("quase", ["quase-ativo", "quase-parado"]),
+                              ("prontos", ["feito-ativo", "feito-parado"])):
+        _obtido = [_l[0] for _l in _nv[_lista]]
+        if _obtido != _esperado:
+            erro("monta", "candidatos[{}] saiu {} — a ordem não é por atividade"
+                 .format(_lista, _obtido))
+    # a estimativa de prazo é o que ordena a lista de quem ainda não chegou
+    if [_l[7] for _l in _nv["quase"]] != [60, 2700]:
+        erro("monta", "prazo dos candidatos saiu {}, esperado [60, 2700]".format(
+            [_l[7] for _l in _nv["quase"]]))
 except Exception as _e:                                      # noqa: BLE001
     erro("monta", "a página não monta com dado sintético: {}: {}".format(
         type(_e).__name__, _e))

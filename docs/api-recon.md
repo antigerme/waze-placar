@@ -203,6 +203,15 @@ nenhuma edição na janela de 90 dias, incluindo os primeiros colocados em
 progresso (medido em 06/08/2026). Quem for usar a lista para falar de quem está
 subindo precisa cruzar com o vetor diário do perfil.
 
+Filtrar quem parou não basta: **ordenar pelo `fracToNextRank` também premia o
+acumulado**. Entre os que ainda editavam, nove dos doze primeiros em progresso
+levariam mais de dois anos para chegar ao limiar no ritmo dos 90 dias. O
+projeto ordena pelo que falta dividido por esse ritmo — dividindo
+`mapEditCount` pela fração sai o limiar daquela pessoa, seja qual for a regra
+que o produziu, e a subtração dá o que falta. O número é da pessoa, não do
+nível: continua não dando para dizer "faltam N edições" para todo mundo do
+nível 2.
+
 **A lista alcança quem o ranking não alcança.** Numa coleta, 132 dos 172
 candidatos brasileiros não estavam em nenhum dos 84 rankings — a maioria de
 nível baixo, que não pontua o bastante para entrar, mas um deles com 665.733
