@@ -33,6 +33,10 @@ CONC_FAIXAS = (5, 10, 25, 50, 100)   # cortes do painel de concentração
 CONC_KPI = 50         # qual dos cortes vira KPI; precisa estar em CONC_FAIXAS
 CANDIDATOS_LISTA = 12  # linhas do painel de quem está subindo de nível
 REF_MIN = 10          # linhas na tela para as réguas da tabela significarem algo
+# Teto de linhas desenhadas de uma vez. Não é enfeite: a aba do histórico tem
+# milhares de editores, e cada linha vira mais de dez nós. Num celular modesto,
+# montar tudo travava a página por quase três segundos a cada troca de aba.
+LINHAS_MAX = 300
 
 # Tendência: variação entre as duas metades da janela.
 TEND_MIN = 200        # volume mínimo para a razão significar algo
@@ -554,6 +558,7 @@ def prepara(perfis, ufs, gerado, areas=None, estat=None, extras=None,
             "calDesvios": CAL_DESVIOS,
             "concKpiN": CONC_KPI,
             "refMin": REF_MIN,
+            "linhasMax": LINHAS_MAX,
             "baldes": BUCKETS,
             "baldeDias": BUCKET_DIAS,
             "tendBanda": TEND_BANDA,
@@ -806,6 +811,14 @@ PAGE = r"""<!doctype html>
   tr.regua td.name { font-weight:600 }
   tr.regua td.num { font-variant-numeric:tabular-nums }
 
+  .resto { display:flex; gap:12px; align-items:center; flex-wrap:wrap;
+           margin:10px 2px 0; color:var(--muted); font-size:.82rem }
+  .resto button { background:var(--card); border:1px solid var(--line);
+                  color:var(--ink); border-radius:8px; padding:6px 14px;
+                  cursor:pointer; font-size:.82rem; font-weight:600;
+                  font-family:inherit }
+  .resto button:hover { border-color:var(--muted) }
+
   footer { margin-top:24px; color:var(--muted); font-size:.8rem }
   footer p { margin:.45em 0 }
   code { background:var(--chip); padding:1px 5px; border-radius:4px; font-size:.9em }
@@ -843,6 +856,10 @@ PAGE = r"""<!doctype html>
       <tbody id="body"></tbody>
     </table>
     <div class="empty" id="empty" hidden>Nenhum editor encontrado.</div>
+  </div>
+  <div class="resto" id="resto" hidden>
+    <span id="restoTexto"></span>
+    <button type="button" id="verTudo">Mostrar todos</button>
   </div>
 
   <div class="paineis" id="paineis"></div>
@@ -1058,10 +1075,16 @@ function linhaRegua(rot, valor, ajuda) {
     </tr>`;
 }
 
+// Só o pedaço que cabe na tela de uma vez. O resto continua na busca e no
+// filtro — o corte é de desenho, não de dados.
+let mostrarTudo = false;
+
 function render() {
-  const lista = linhas();
+  const todas = linhas();
+  const corta = !mostrarTudo && todas.length > C.linhasMax;
+  const lista = corta ? todas.slice(0, C.linhasMax) : todas;
   const c = col();
-  const reg = reguas(lista, c);
+  const reg = reguas(todas, c);
   const antes = (n) => (reg[n] || []).map((r) => linhaRegua(...r)).join("");
   $("body").innerHTML = lista.map((e, n) => `${antes(n)}<tr>
       <td class="pos">${n + 1}</td>
@@ -1077,8 +1100,14 @@ function render() {
       <td class="num c-seq" title="${e[7] ? e[7] + " dia(s) seguidos editando" : "Não está numa sequência"}">${e[7] || ""}</td>
       <td class="num c-tend">${tend(e[8])}</td>
       <td class="num c-hist" title="${NF.format(e[3])} edições desde a primeira">${NF.format(e[3])}</td>
-    </tr>`).join("") + antes(lista.length);
-  $("empty").hidden = lista.length > 0;
+    </tr>`).join("") + (corta ? "" : antes(lista.length));
+  $("resto").hidden = !corta;
+  if (corta) {
+    $("restoTexto").textContent = "Mostrando " + NF.format(lista.length) +
+      " de " + NF.format(todas.length) + " editores. A busca e o filtro de " +
+      "estado procuram em todos.";
+  }
+  $("empty").hidden = todas.length > 0;
   $("thJanela").textContent =
     aba === "tot" ? "Edições" : "Edições · " + ABAS.find((a) => a[0] === aba)[1]
       .replace(" dias", "d");
@@ -1552,10 +1581,20 @@ function build() {
     const b = e.target.closest(".tab");
     if (!b) return;
     aba = b.dataset.k;
+    mostrarTudo = false;
     [...$("tabs").children].forEach((t) =>
       t.setAttribute("aria-selected", t.dataset.k === aba));
     montaUfs();
     render();
+  };
+  // desenhar milhares de linhas trava a aba por segundos; o rótulo muda antes,
+  // num quadro à parte, senão a troca só apareceria depois de tudo pronto
+  $("verTudo").onclick = () => {
+    const b = $("verTudo");
+    b.disabled = true;
+    b.textContent = "Desenhando…";
+    setTimeout(() => { mostrarTudo = true; render(); b.disabled = false;
+                       b.textContent = "Mostrar todos"; }, 16);
   };
   [["thPos", AJUDA.pos], ["thEditor", AJUDA.editor], ["thSpark", AJUDA.faisca],
    ["thSeq", AJUDA.seq], ["thTend", AJUDA.tend], ["thHist", AJUDA.tot]]

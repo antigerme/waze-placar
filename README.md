@@ -55,6 +55,12 @@ Quatro abas — 30 dias, 7 dias, 90 dias e Histórico — ordenadas por ediçõe
 reais da janela. Cada linha traz UF, nível, selos de especialidade e ritmo,
 faísca de 90 dias, sequência de dias consecutivos e tendência.
 
+A tabela desenha um pedaço por vez, com um botão para soltar o resto. Não é
+economia de dados: o histórico tem milhares de editores, cada linha vira mais
+de dez nós, e montar tudo travava um celular modesto por quase três segundos a
+cada troca de aba. A busca e o filtro de estado continuam procurando em todo
+mundo.
+
 Dentro da tabela, duas réguas marcam onde cai o editor típico e onde cai a
 média da aba. São linhas de referência, não pessoas: sem posição, sem selo e
 sem link. Acompanham o filtro de estado e a busca, e somem quando sobra pouca

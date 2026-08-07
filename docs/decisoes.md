@@ -130,6 +130,21 @@ apareceu com o fim de semana mais forte que o dia útil, o oposto do que a
 coleta do dia mostrava. Não deu erro, não pareceu errado: só estava. Hoje o
 `placar.py` avisa quando o arquivo não é do dia.
 
+**Achar que layout correto é página boa.** O auditor cobria transbordo,
+contraste nunca tinha sido medido e desempenho, muito menos. Medindo: 21
+combinações de cor e fundo abaixo do mínimo da WCAG AA nos dois temas, várias
+perto de 2:1, quase todas por esmaecer texto com `opacity` — para passar, as
+opacidades teriam que ir a 0,80–0,95, ou seja, a ferramenta estava errada e a
+hierarquia tinha que vir de cor e tamanho. E num celular quatro vezes mais
+lento, abrir a aba do histórico travava a página por 2,8 segundos, porque
+2.624 linhas viram dezenas de milhares de nós. O gargalo não era montar a
+string, que custa 72 ms: era o tamanho do DOM. Com teto de linhas, 91 ms.
+
+Cuidado ao medir contraste por conta própria: o primeiro medidor que escrevi
+acusou nome preto sobre fundo branco com 1,3:1, porque lia `color-mix` — que o
+Chromium devolve como `color(srgb 0.93 …)`, de 0 a 1 — na mesma escala de
+`rgb()`, de 0 a 255. Medidor errado é pior que nenhum.
+
 **Auditar layout com número de brinquedo.** O `auditar-layout.mjs` passava
 porque a página de teste tinha KPI de cinco dígitos. Com o total real, de oito,
 o cartão vazava em 390 e 768px. A auditoria só enxerga o que está na página que
