@@ -220,6 +220,12 @@ Brasil.
 | Ativos fora da varredura `ALL_TIME` | 42% |
 | Linhas de ranking de janela sem edição | 99% |
 
+Uma segunda execução completa, em 07/08/2026, para comparar: 2.618 editores no
+universo, 304 e 218 ativos em 90 e 30 dias, 1.694.783 edições na janela, 81% no
+top 50, 19 estados com fator de ônibus 1, 105 afilhados nomeados e todos
+olhados, 133 editores cobrindo 552 áreas. Quatro dias depois da primeira e tudo
+na mesma ordem de grandeza — que é o que a tabela existe para mostrar.
+
 O `rankCandidates` entrou depois desta tabela, então ele tem os números dele, de
 06/08/2026: **120 candidatos brasileiros na lista** e **90 que não apareciam em
 ranking nenhum**. O total de omitidos por sanção fica aqui, não na página. Como esses 90
