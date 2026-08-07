@@ -130,6 +130,14 @@ apareceu com o fim de semana mais forte que o dia útil, o oposto do que a
 coleta do dia mostrava. Não deu erro, não pareceu errado: só estava. Hoje o
 `placar.py` avisa quando o arquivo não é do dia.
 
+**Deixar o viés voltar pela porta dos fundos.** A comparação de mentoria já
+tinha sido consertada uma vez: buscar o perfil dos afilhados que não estão no
+universo, senão a amostra é só de quem deu certo. Mas nada impedia a página de
+voltar ao número enviesado se essa busca falhasse — ela publicaria "100% contra
+12%" sem avisar que mediu doze de oitenta e oito. Correção errada é a que
+depende de tudo dar certo. Hoje a página mede a cobertura e, abaixo de um piso,
+não mostra a comparação: diz que a amostra é parcial e por quê.
+
 **Achar que layout correto é página boa.** O auditor cobria transbordo,
 contraste nunca tinha sido medido e desempenho, muito menos. Medindo: 21
 combinações de cor e fundo abaixo do mínimo da WCAG AA nos dois temas, várias

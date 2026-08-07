@@ -37,6 +37,11 @@ REF_MIN = 10          # linhas na tela para as réguas da tabela significarem al
 # milhares de editores, e cada linha vira mais de dez nós. Num celular modesto,
 # montar tudo travava a página por quase três segundos a cada troca de aba.
 LINHAS_MAX = 300
+# Fatia mínima dos afilhados nomeados que precisa ser mensurável para a
+# comparação de mentoria valer. Sem isso a página compara só quem já estava no
+# universo — e estar no universo exige ter aparecido num ranking, ou seja, ter
+# dado certo. Foi assim que este projeto quase publicou 100% de retenção.
+MENTORIA_COBERTURA = 60   # por cento
 
 # Tendência: variação entre as duas metades da janela.
 TEND_MIN = 200        # volume mínimo para a razão significar algo
@@ -443,10 +448,16 @@ def prepara(perfis, ufs, gerado, areas=None, estat=None, extras=None,
         mentores.append([p["username"], ufs.get(p["username"]), total,
                          len(lista), viv])
     mentores.sort(key=lambda r: (-r[4], -r[2]))
+    cobertura = round(100 * len(medidos) / len(apad)) if apad else 0
     mentoria = {
         "mentores": len(mentores),
         "afilhados": len(apad),
         "rastreados": len(medidos),
+        "cobertura": cobertura,
+        # Abaixo do piso a comparação não vai para a tela: com amostra parcial
+        # ela mede quem já tinha aparecido num ranking, não quem foi
+        # apadrinhado, e o número sai altíssimo parecendo achado.
+        "comparavel": cobertura >= MENTORIA_COBERTURA,
         "ativosApad": ativos_ap,
         "pctApad": round(100 * ativos_ap / len(medidos)) if medidos else 0,
         "pctResto": round(100 * ativos_re / len(resto)) if resto else 0,
@@ -557,6 +568,7 @@ def prepara(perfis, ufs, gerado, areas=None, estat=None, extras=None,
             "recenteDias": RECENTE_DIAS,
             "calDesvios": CAL_DESVIOS,
             "concKpiN": CONC_KPI,
+            "mentoriaCobertura": MENTORIA_COBERTURA,
             "refMin": REF_MIN,
             "linhasMax": LINHAS_MAX,
             "baldes": BUCKETS,
@@ -1487,7 +1499,7 @@ function paineis() {
   }
 
   blocos.push(`<div class="painel"><h2>Mentoria</h2>
-    ${mt.rastreados ? `<div class="barra" title="Dos ${NF.format(mt.rastreados)} editores que aparecem como afilhados de alguém, ${mt.pctApad}% editaram nos últimos ${D.cfg.janela} dias."><span>apadr.</span>
+    ${mt.comparavel ? `<div class="barra" title="Dos ${NF.format(mt.rastreados)} editores que aparecem como afilhados de alguém, ${mt.pctApad}% editaram nos últimos ${D.cfg.janela} dias."><span>apadr.</span>
        <span class="t"><span class="f" style="width:${mt.pctApad}%;display:block"></span></span>
        <span class="v">${mt.pctApad}%</span></div>
      <div class="barra" title="Entre todos os outros editores do placar, ${mt.pctResto}% editaram nos últimos ${D.cfg.janela} dias. É a taxa de base para comparar."><span>demais</span>
@@ -1495,7 +1507,8 @@ function paineis() {
        <span class="v">${mt.pctResto}%</span></div>
      <p style="color:var(--muted);font-size:.8rem;margin:8px 0 12px">
      Fatia que editou nos últimos ${D.cfg.janela} dias, entre os
-     ${NF.format(mt.rastreados)} apadrinhados e entre os demais editores. Os
+     ${NF.format(mt.rastreados)} apadrinhados que a coleta conseguiu olhar
+     — ${mt.cobertura}% dos nomeados — e entre os demais editores. Os
      dois lado a lado não mostram que apadrinhar faz ficar. Quem vira afilhado
      não é sorteado, e esta coleta não tem como separar o efeito do
      apadrinhamento de quem já ia continuar de todo jeito.</p>
@@ -1509,7 +1522,10 @@ function paineis() {
         <td class="num">${n}${n > lst ? "*" : ""}</td>
         <td class="num">${viv}${n > lst ? "*" : ""}</td></tr>`).join("")}
      </tbody></table>`
-     : `<p style="color:var(--muted)">Sem dados de afilhados nesta coleta.</p>`}
+     : `<p style="color:var(--muted)">Esta coleta só conseguiu olhar
+        ${mt.cobertura}% dos afilhados nomeados, abaixo do piso de
+        ${D.cfg.mentoriaCobertura}% — comparar com essa amostra mediria quem já
+        aparecia num ranking, não quem foi apadrinhado.</p>`}
     <p style="color:var(--muted);font-size:.8rem;margin:10px 0 0">
     ${NF.format(mt.mentores)} editores aparecem como mentores, com
     ${NF.format(mt.afilhados)} afilhados nomeados.${mt.truncados
