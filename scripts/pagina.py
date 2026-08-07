@@ -629,7 +629,7 @@ PAGE = r"""<!doctype html>
     color-scheme: light;
     --page:#f6f8fa; --card:#fff; --ink:#12212e; --muted:#5b6b7a;
     --line:#e3e9ef; --chip:#eef3f7;
-    --series:#2a78d6; --series-soft:#cde2fb;
+    --series:#2a78d6; --series-soft:#cde2fb; --tab-ativa:#1a62b8;
     --grid:#e1e0d9; --baseline:#c3c2b7; --axis:#898781;
     --up:#006300; --down:#d03b3b;
   }
@@ -638,18 +638,18 @@ PAGE = r"""<!doctype html>
       color-scheme: dark;
       --page:#0d1519; --card:#141f26; --ink:#e6eef4; --muted:#8ba3b4;
       --line:#22323d; --chip:#1b2a33;
-      --series:#3987e5; --series-soft:#1b3f55;
+      --series:#3987e5; --series-soft:#1b3f55; --tab-ativa:#2a6fc4; --tab-ativa:#2a6fc4;
       --grid:#2c2c2a; --baseline:#383835; --axis:#898781;
-      --up:#0ca30c; --down:#d03b3b;
+      --up:#0ca30c; --down:#e86b66;
     }
   }
   :root[data-theme="dark"] {
     color-scheme: dark;
     --page:#0d1519; --card:#141f26; --ink:#e6eef4; --muted:#8ba3b4;
     --line:#22323d; --chip:#1b2a33;
-    --series:#3987e5; --series-soft:#1b3f55;
+    --series:#3987e5; --series-soft:#1b3f55; --tab-ativa:#2a6fc4;
     --grid:#2c2c2a; --baseline:#383835; --axis:#898781;
-    --up:#0ca30c; --down:#d03b3b;
+    --up:#0ca30c; --down:#e86b66;
   }
   * { box-sizing:border-box }
   body { margin:0; background:var(--page); color:var(--ink);
@@ -687,8 +687,11 @@ PAGE = r"""<!doctype html>
   .tab { border:1px solid var(--line); background:var(--card); color:var(--muted);
          padding:8px 16px; border-radius:999px; cursor:pointer; font-size:.9rem;
          font-weight:600; font-family:inherit }
-  .tab[aria-selected="true"] { background:var(--series); border-color:var(--series);
-                               color:#fff }
+  .tab[aria-selected="true"] { background:var(--tab-ativa);
+                               border-color:var(--tab-ativa); color:#fff }
+  /* o contador da aba se distingue pelo peso, não por opacidade: esmaecer
+     texto pequeno sobre azul derrubava o contraste para menos de 3:1 */
+  .tab .conta { font-weight:400 }
   .controls { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px }
   input, select { background:var(--card); border:1px solid var(--line);
                   color:var(--ink); border-radius:8px; padding:8px 12px;
@@ -716,8 +719,9 @@ PAGE = r"""<!doctype html>
                                          text-decoration:underline }
   .chip { background:var(--chip); border-radius:5px; padding:1px 7px;
           font-size:.75rem; color:var(--muted); font-weight:600 }
-  .chip.fraco { background:transparent; color:var(--muted); opacity:.5;
-                font-weight:500 }
+  /* o que distingue o selo esmaecido é não ter fundo, não ser translúcido:
+     com opacidade .5 o texto ficava em 2:1, ilegível para muita gente */
+  .chip.fraco { background:transparent; color:var(--muted); font-weight:500 }
   .up { color:var(--up); font-weight:600 }
   .down { color:var(--down); font-weight:600 }
   .flat { color:var(--muted) }
@@ -747,6 +751,8 @@ PAGE = r"""<!doctype html>
               min-width:2px }
   .barra .v { color:var(--muted); font-variant-numeric:tabular-nums;
               font-size:.8rem }
+  /* hierarquia por tamanho, não por opacidade — ver o comentário do chip */
+  .barra .v .sec, .painel p .sec { font-size:.88em }
   .painel table { font-size:.85rem; width:100% }
   .painel td, .painel th { padding:5px 8px; border-bottom:1px solid var(--line);
                            white-space:normal }
@@ -1305,7 +1311,7 @@ function paineis() {
         <span>${ano}</span>
         <span class="t"><span class="f" style="width:${Math.max(1, (n / max) * 100)}%;display:block"></span></span>
         <span class="v" title="${n} pessoa(s) fizeram a primeira edição em ${ano}; ${viv} delas ainda editaram nos últimos ${D.cfg.janela} dias.">${n}
-          <span style="opacity:${poucos ? .4 : .8}">· ${pct}%${poucos ? "*" : ""}</span></span>
+          <span class="sec">· ${pct}%${poucos ? "*" : ""}</span></span>
       </div>`;
     }).join("")}
     <p style="color:var(--muted);font-size:.8rem;margin:10px 0 0">
@@ -1315,7 +1321,7 @@ function paineis() {
     <b>${D.resumo.retencao}%</b>, variando de ${D.resumo.faixaRetencao[0]}% a
     ${D.resumo.faixaRetencao[1]}%. As mais novas ficam fora dessa conta porque
     tiveram menos tempo para perder gente, e não porque marquem mais ou menos.
-    <span style="opacity:.7">* menos de ${D.cfg.safraMin} pessoas — o percentual
+    <span class="sec">* menos de ${D.cfg.safraMin} pessoas — o percentual
     oscila demais para significar algo.</span></p></div>`);
 
   blocos.push(`<div class="painel"><h2>Produziam e pararam</h2>
@@ -1369,7 +1375,7 @@ function paineis() {
       return `<div class="barra" title="Nível ${lv}: ${NF.format(n)} editores no nível, ${viv} deles ativos nos últimos ${D.cfg.janela} dias — ${pct}%.">
         <span>N${lv}</span>
         <span class="t"><span class="f" style="width:${Math.max(1, pct)}%;display:block"></span></span>
-        <span class="v">${pct}% <span style="opacity:.6">de ${NF.format(n)}</span></span>
+        <span class="v">${pct}% <span class="sec">de ${NF.format(n)}</span></span>
       </div>`;
     }).join("")}
     <p style="color:var(--muted);font-size:.8rem;margin:10px 0 0">
@@ -1477,7 +1483,7 @@ function paineis() {
     <p style="color:var(--muted);font-size:.8rem;margin:10px 0 0">
     ${NF.format(mt.mentores)} editores aparecem como mentores, com
     ${NF.format(mt.afilhados)} afilhados nomeados.${mt.truncados
-      ? ` <span style="opacity:.8">* a API lista no máximo ${mt.capLista}
+      ? ` <span class="sec">* a API lista no máximo ${mt.capLista}
           afilhados por mentor, então para ${NF.format(mt.truncados)} deles a
           coluna de ativos sai de uma amostra.</span>` : ""}</p></div>`);
 
@@ -1540,7 +1546,7 @@ function build() {
        title="${AJUDA.janela[k]} ${k === "tot"
          ? "O número ao lado é o universo inteiro que o placar enxerga."
          : "O número ao lado é quantos editores têm ao menos uma edição nessa janela."}">
-       ${rot} <span style="opacity:.65">${NF.format(D.abas[k].length)}</span>
+       ${rot} <span class="conta">${NF.format(D.abas[k].length)}</span>
      </button>`).join("");
   $("tabs").onclick = (e) => {
     const b = e.target.closest(".tab");
