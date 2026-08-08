@@ -64,6 +64,14 @@ def main():
     with open(a.perfis, encoding="utf-8") as f:
         perfis = [json.loads(l) for l in f if l.strip()]
 
+    # Numa coleta `--sem-perfis` não existe vetor diário: tudo que é janela sai
+    # zerado por não ter sido medido, e a página diz isso em vez de mostrar
+    # painel vazio. Não há o que conferir aqui, e sem esta saída o primeiro
+    # painel dividia por zero e devolvia traceback em vez de explicação.
+    if D["cfg"].get("semAtividade"):
+        sys.exit("esta página foi gerada sem perfis, então não tem vetor diário "
+                 "para conferir.\nGere com a coleta completa e rode de novo.")
+
     hoje = dt.date.today()
     d0 = hoje - dt.timedelta(days=P.JANELA)
     cal = D["paineis"].get("calendario") or []
@@ -151,9 +159,11 @@ def main():
     # ------------------------------------------------------- 4. concentração
     tot90 = sum(e[6] for e in ED.values())
     ord90 = sorted((e[6] for e in ED.values()), reverse=True)
+    # ninguém editou na janela: o gerador divide por 1 para não estourar, e a
+    # conferência precisa dividir igual — senão acusa divergência onde não há
     for n, pc in D["paineis"]["concentracao"]:
         conf("concentração top %d" % n,
-             round(100 * sum(ord90[:n]) / tot90, 1), pc, 0.05)
+             round(100 * sum(ord90[:n]) / (tot90 or 1), 1), pc, 0.05)
     conf("KPI de concentração casa com o corte",
          dict(D["paineis"]["concentracao"])[P.CONC_KPI], R["concKpi"])
 
@@ -206,10 +216,11 @@ def main():
     conf("ritmo semanal", semana, [x[1] for x in D["paineis"]["semana"]])
     uteis = [i for i in range(len(P.DIAS)) if i < 5]
     fds = [i for i in range(len(P.DIAS)) if i >= 5]
-    conf("delta de fim de semana",
-         round(100 * ((sum(semana[i] for i in fds) / len(fds))
-                      / (sum(semana[i] for i in uteis) / len(uteis)) - 1)),
-         R["deltaFds"])
+    media_util = sum(semana[i] for i in uteis) / len(uteis)
+    if media_util:
+        conf("delta de fim de semana",
+             round(100 * ((sum(semana[i] for i in fds) / len(fds))
+                          / media_util - 1)), R["deltaFds"])
     med = sorted(diario)[len(diario) // 2]
     conf("mediana diária", med, D["paineis"]["calMediana"])
     m = sum(diario) / len(diario)
@@ -234,8 +245,11 @@ def main():
     lim = hoje.year - P.SAFRA_MADURA
     taxas = sorted(round(100 * v / n) for an, n, v in esp_ent
                    if n >= P.SAFRA_MIN and an <= lim)
-    conf("retenção mediana", taxas[len(taxas) // 2], R["retencao"])
-    conf("faixa de retenção", [taxas[0], taxas[-1]], R["faixaRetencao"])
+    # sem nenhuma safra grande e madura não há retenção a medir, e a página
+    # também não a mostra — conferir aqui daria IndexError numa coleta pequena
+    if taxas:
+        conf("retenção mediana", taxas[len(taxas) // 2], R["retencao"])
+        conf("faixa de retenção", [taxas[0], taxas[-1]], R["faixaRetencao"])
     conf("ano limite da safra madura", lim, R["safraLimite"])
 
     # ------------------------------------------- 9. gigantes parados e evasão
@@ -286,11 +300,11 @@ def main():
     MT = D["paineis"]["mentoria"]
     rastreados = [n for n in apad if n in ED]
     conf("mentoria: afilhados rastreados", len(rastreados), MT["rastreados"])
-    if rastreados and MT.get("comparavel"):
+    resto = [n for n in ED if n not in apad]
+    if rastreados and resto and MT.get("comparavel"):
         viv = sum(1 for n in rastreados if ED[n][6] > 0)
         conf("mentoria: % de apadrinhados ativos",
              round(100 * viv / len(rastreados)), MT["pctApad"])
-        resto = [n for n in ED if n not in apad]
         conf("mentoria: % dos demais ativos",
              round(100 * sum(1 for n in resto if ED[n][6] > 0) / len(resto)),
              MT["pctResto"])
@@ -313,7 +327,7 @@ def main():
          all(prontos[i][8] >= prontos[i + 1][8] for i in range(len(prontos) - 1)))
     quase = nv.get("quase") or []
     conf("candidatos: ninguém pronto na lista de quem falta", True,
-         all(l[4] < 100 for l in quase))
+         all(linha[4] < 100 for linha in quase))
     conf("candidatos que faltam: ordem por prazo", True,
          all(quase[i][7] <= quase[i + 1][7] for i in range(len(quase) - 1)))
 

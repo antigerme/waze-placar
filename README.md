@@ -233,7 +233,8 @@ aponta um binário próprio, se houver.
 o `const D` que a página carrega — dezenas de milhares de conferências, uma por
 valor publicado. Não chama as funções do `pagina.py` de propósito: reusá-las só
 provaria que o código é igual a si mesmo. Precisa do JSONL da mesma coleta e do
-dia de hoje, e recusa em vez de despejar mil falhas quando não é.
+dia de hoje, e recusa em vez de despejar mil falhas quando não é. Também recusa
+uma página de `--sem-perfis`: sem vetor diário não há janela para conferir.
 
 **`auditar-layout.mjs`** abre a página em quatro larguras e falha se algo rolar
 lateralmente, vazar do painel, soltar erro de JS no console, mostrar número com
