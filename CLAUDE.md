@@ -11,13 +11,15 @@ nova já foi tentada e está lá com o motivo da rejeição.
 
 ## Como o trabalho entra
 
-Todo trabalho vai para uma branch e vira PR — nada direto na `main`. O dono do
-repositório sempre fecha com **squash merge e apaga a branch**.
+Todo trabalho vai para uma branch e vira PR — nada direto na `main`. O merge é
+sempre **squash**, e a branch é apagada logo depois: o repositório tem
+"Automatically delete head branches" ligado, então isso não depende de ninguém
+lembrar.
 
 A consequência importa: depois de um merge, o commit da branch e o da `main` têm
-o mesmo conteúdo com hashes diferentes, e a branch remota some. **Comece toda
-sessão recriando a branch a partir da `main`**, nunca continuando de onde a
-anterior parou:
+o mesmo conteúdo com hashes diferentes, e a branch remota não existe mais.
+**Comece toda sessão recriando a branch a partir da `main`**, nunca continuando
+de onde a anterior parou:
 
 ```bash
 git fetch --prune origin main
