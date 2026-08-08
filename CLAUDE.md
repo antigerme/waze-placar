@@ -9,6 +9,27 @@
 Consultar os dois evita refazer caminho andado. Boa parte do que parece ideia
 nova já foi tentada e está lá com o motivo da rejeição.
 
+## Como o trabalho entra
+
+Todo trabalho vai para uma branch e vira PR — nada direto na `main`. O merge é
+sempre **squash**, e a branch é apagada logo depois: o repositório tem
+"Automatically delete head branches" ligado, então isso não depende de ninguém
+lembrar.
+
+A consequência importa: depois de um merge, o commit da branch e o da `main` têm
+o mesmo conteúdo com hashes diferentes, e a branch remota não existe mais.
+**Comece toda sessão recriando a branch a partir da `main`**, nunca continuando
+de onde a anterior parou:
+
+```bash
+git fetch --prune origin main
+git checkout -B <branch> origin/main
+```
+
+Continuar da branch velha depois de um squash faz o PR seguinte propor de novo o
+que já entrou. Já aconteceu, e o conserto — mesclar a `main` para dentro — deixa
+um commit de merge que o squash não precisava.
+
 ## Idioma
 
 Português em tudo que é escrito: mensagens de commit, documentação, comentários
