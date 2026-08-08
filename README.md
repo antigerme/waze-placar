@@ -213,12 +213,42 @@ projeto já cometeu e como cada um foi descoberto, os caminhos testados e
 descartados com o motivo, as ordens de grandeza de uma execução saudável — que
 servem de canário — e o que ainda não foi explorado.
 
-`scripts/auditar-layout.mjs` abre a página gerada num navegador em quatro
-larguras e falha se algo rolar lateralmente, vazar do painel, soltar erro de JS
-no console, mostrar número com ponto decimal — que numa página em português é
-sempre defeito — ou desenhar uma barra de tamanho diferente do que o CSS pediu. Precisa de `npm i playwright`. Vale rodar depois de mexer no
-`pagina.py`: validar por métrica no Python deixou passar uma tabela que
-estourava em todas as larguras, e um KPI escrito "67.2%".
+## Conferindo a página gerada
+
+O `verificar.py` roda sozinho e é barato, mas só olha o código e a
+documentação. Estas quatro ferramentas olham a página pronta, cada uma por um
+ângulo que as outras não cobrem. Rode as quatro depois de mexer no `pagina.py`:
+
+```bash
+python3 scripts/conferir.py --pagina placar.html --perfis perfis.jsonl
+node scripts/auditar-layout.mjs placar.html
+node scripts/auditar-dom.mjs placar.html
+node scripts/auditar-contraste.mjs placar.html
+```
+
+As três de navegador precisam de `npm i playwright`; `PLAYWRIGHT_CHROMIUM`
+aponta um binário próprio, se houver.
+
+**`conferir.py`** refaz a aritmética inteira a partir do JSONL cru e compara com
+o `const D` que a página carrega — dezenas de milhares de conferências, uma por
+valor publicado. Não chama as funções do `pagina.py` de propósito: reusá-las só
+provaria que o código é igual a si mesmo. Precisa do JSONL da mesma coleta e do
+dia de hoje, e recusa em vez de despejar mil falhas quando não é.
+
+**`auditar-layout.mjs`** abre a página em quatro larguras e falha se algo rolar
+lateralmente, vazar do painel, soltar erro de JS no console, mostrar número com
+ponto decimal — que numa página em português é sempre defeito — ou desenhar uma
+barra de tamanho diferente do que o CSS pediu.
+
+**`auditar-dom.mjs`** compara o que o navegador realmente pinta com o payload
+embutido, linha a linha, em cada aba e em três larguras. Payload certo não
+garante página certa: o bug que travava toda barra num mesmo comprimento passou
+por baixo de toda validação em Python.
+
+**`auditar-contraste.mjs`** mede o contraste do texto pintado nos dois temas,
+compondo as camadas — fundo semitransparente mesclado com o que está atrás,
+opacidade herdada aplicada à cor. Sem compor, o medidor inventa falha: o
+primeiro que escrevemos acusou nome preto sobre branco a 1,3:1.
 
 Rode contra uma página com os números de verdade, não com dado de brinquedo: o
 que estoura o layout é o total de oito dígitos, não o de cinco.

@@ -41,16 +41,35 @@ def flags_de(script):
                          capture_output=True, text=True, timeout=30).stdout
     return set(re.findall(r"(?<![\w-])(--[a-z][a-z-]+)", out)) - {"--help"}
 
+# A lista de scripts se descobre sozinha: fixá-la à mão já deixou uma
+# ferramenta nova de fora da conferência, que é o jeito de a documentação
+# descolar sem ninguém notar.
 reais = set()
-for script in ("placar.py", "perfis.py"):
+EU = Path(__file__).name
+for caminho in sorted(SCRIPTS.glob("*.py")):
+    # a si mesmo não: este arquivo cita a marca abaixo e chamaria a si próprio
+    if caminho.name == EU:
+        continue
+    if "argparse.ArgumentParser" not in caminho.read_text(encoding="utf-8"):
+        continue                              # módulo, não ferramenta de CLI
     try:
-        reais |= flags_de(script)
+        reais |= flags_de(caminho.name)
     except Exception as e:                                   # noqa: BLE001
-        erro("cli", "não consegui rodar {} --help: {}".format(script, e))
+        erro("cli", "não consegui rodar {} --help: {}".format(caminho.name, e))
 
 citadas = set(re.findall(r"(?<![\w-])(--[a-z][a-z-]+)", readme))
 for f in sorted(citadas - reais):
     erro("cli", "README cita {}, que não existe mais".format(f))
+
+# Ferramenta que ninguém sabe que existe é ferramenta perdida: os validadores
+# mais pesados moraram fora do repositório e sumiram com o contêiner uma vez.
+docs = readme + (RAIZ / "CLAUDE.md").read_text(encoding="utf-8")
+for arq in sorted((RAIZ / "docs").glob("*.md")):
+    docs += arq.read_text(encoding="utf-8")
+for caminho in sorted(SCRIPTS.iterdir()):
+    if caminho.suffix in (".py", ".mjs") and caminho.name not in docs:
+        erro("cli", "scripts/{} não é citado em documento nenhum"
+             .format(caminho.name))
 
 
 # ------------------------------------------ 3. endpoints documentados na API

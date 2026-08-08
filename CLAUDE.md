@@ -37,9 +37,21 @@ dia em que foi escrito, mentira no dia em que a coleta falhar num nível. Hoje
 ela confere e diz onde quebra. Se você for escrever "sobe", "é raro", "quase
 todos" — meça e deixe o script escrever a frase.
 
-**Rode `scripts/auditar-layout.mjs` depois de mexer no `pagina.py`.** Precisa de
-`npm i playwright`. Validar por métrica em Python já deixou passar uma tabela
-que estourava o container em todas as larguras.
+**Rode os quatro conferidores depois de mexer no `pagina.py`.** O
+`verificar.py` roda sozinho, mas só olha código e documentação; a página pronta
+é outra coisa. As três de navegador precisam de `npm i playwright`.
+
+```bash
+python3 scripts/conferir.py --pagina placar.html --perfis perfis.jsonl
+node scripts/auditar-layout.mjs placar.html
+node scripts/auditar-dom.mjs placar.html
+node scripts/auditar-contraste.mjs placar.html
+```
+
+Cada um cobre um ângulo que os outros não veem, e cada um existe por um erro
+que passou pelos demais — está no README qual foi. Validar por métrica em
+Python deixou passar uma tabela que estourava o container em todas as larguras;
+validar o payload deixou passar toda barra travada no mesmo comprimento.
 
 **Não chame `AddMentee` nem `ArchiveMentee`.** Alteram estado no Waze.
 
@@ -72,11 +84,13 @@ deliberado. O teto do Waze nunca foi testado, de propósito.
 `.claude/settings.json`. Ele falha e devolve o motivo quando a documentação
 descola do código: flag citada no README que não existe mais, endpoint novo sem
 entrada em `docs/api-recon.md`, número literal em qualquer texto da página,
-painel que o README não lista, ou seção perdida do `docs/decisoes.md`.
+painel que o README não lista, seção perdida do `docs/decisoes.md`, ou
+ferramenta em `scripts/` que documento nenhum menciona.
 
 Ele também monta a página inteira com dado sintético e confere que o
-`placar.py` ainda acha os campos que lê. Renomear campo do payload quebrava só
-no fim de uma coleta de dezenas de minutos, com a página já publicada.
+`placar.py` ainda acha os campos que lê, e que o painel de quem está subindo de
+nível continua ordenado por atividade. Renomear campo do payload quebrava só no
+fim de uma coleta de dezenas de minutos, com a página já publicada.
 
 Se ele reclamar, **atualize o documento** — não relaxe a checagem. Cada uma
 delas existe porque a coisa correspondente já desatualizou sem ninguém notar.

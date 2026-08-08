@@ -169,6 +169,15 @@ dos doze nomes. É o mesmo erro que o placar inteiro existe para não cometer, e
 foi cometido dentro dele. O `verificar.py` monta o painel com quatro
 sintéticos em que as duas ordens são opostas e falha se a antiga voltar.
 
+**Deixar o ferramental fora do repositório.** Por dias os conferidores mais
+pesados — a aritmética refeita do zero, o DOM contra o payload, o contraste
+composto — moraram num diretório temporário de sessão. Rodavam, achavam
+defeito, e sumiam com o contêiner: quem chegasse depois teria que reescrevê-los
+para descobrir o que já se sabia. Hoje são `scripts/conferir.py`,
+`scripts/auditar-dom.mjs` e `scripts/auditar-contraste.mjs`, e o
+`verificar.py` recusa arquivo em `scripts/` que documento nenhum mencione —
+ferramenta que ninguém sabe que existe é ferramenta perdida.
+
 **Auditar layout com número de brinquedo.** O `auditar-layout.mjs` passava
 porque a página de teste tinha KPI de cinco dígitos. Com o total real, de oito,
 o cartão vazava em 390 e 768px. A auditoria só enxerga o que está na página que
@@ -283,6 +292,23 @@ CDN. Só fontes de sistema. Vale conferir de novo se alguém adicionar bibliotec
 
 **Teclado e leitor de tela.** A ordem do Tab é a visual, todo controle tem foco
 visível e nome acessível, e Enter aciona abas e o botão de tema.
+
+**Nenhum número da prosa está escrito à mão.** A pergunta veio de fora: de onde
+sai o "só nomeia a cidade em N% das edições"? Sai de `city` vindo em cada
+transação, contado contra o total da janela — 1.402 de 2.021 na coleta
+conferida, e o número acompanha quando a entrada muda. Para o caso geral, duas
+páginas foram geradas de coletas diferentes e toda a prosa que um leitor vê
+— legenda, dica de hover, `title=` de coluna, rótulo de aba, 433 e 401 frases
+— foi comparada trocando cada número por um buraco. Das 109 frases com número
+idêntico nas duas, cerca de metade era dígito dentro de nome de usuário, o
+resto era constante nomeada viajando no `cfg` ou dado que coincidiu por eu ter
+alimentado as duas com o mesmo `areas.json`. Sobraram duas frases sem
+explicação — o `foraPct` e o `semEdicaoPct` —, e variar os dois mudou o texto.
+
+Esse comparador **não** virou ferramenta: precisa de duas coletas e devolve
+cem linhas para triar à mão, enquanto o `verificar.py` pega a mesma classe de
+defeito no código-fonte, sem ambiguidade. Conferido escrevendo `69%` à mão na
+frase da cidade: os dois checadores de prosa acusaram na hora.
 
 ---
 
