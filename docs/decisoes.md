@@ -169,21 +169,30 @@ dos doze nomes. É o mesmo erro que o placar inteiro existe para não cometer, e
 foi cometido dentro dele. O `verificar.py` monta o painel com quatro
 sintéticos em que as duas ordens são opostas e falha se a antiga voltar.
 
-**Numerar as linhas em vez de mostrar a posição.** A coluna `#` vinha do índice
-do que sobrava na tela. Sem filtro, índice e posição coincidem, e por isso
-passou por toda conferência: o auditor de DOM comparava posição com índice, que
-é a mesma conta. Com a busca ligada, quem é o 30º da aba se via como `#1`.
-Filtrando o estado, um terceiro número. Foi um editor procurando o próprio nome
-que percebeu — três posições para a mesma pessoa, na mesma aba, com os mesmos
-números ao lado.
+**Tratar busca e filtro de estado como a mesma coisa.** A coluna `#` vinha do
+índice do que sobrava na tela, depois dos dois controles. Sem filtro, índice e
+posição coincidem — e por isso passou por toda conferência, inclusive pelo
+auditor de DOM, que comparava posição com índice, que é a mesma conta. Foi um
+editor procurando o próprio nome que percebeu: 30º da aba, `#1` ao digitar
+"antig".
 
-Hoje a posição é atribuída antes de filtrar, e o auditor de DOM confere com o
-filtro ligado, não só sem ele. Posição que muda com a busca não é posição.
+Os dois controles não são a mesma coisa. **Estado troca o recorte**: filtrar a
+Bahia é pedir o placar da Bahia, e ali ser o segundo é ser o segundo — renumerar
+é o certo, e essa parte nunca esteve errada. **Busca procura dentro do recorte**
+e não deveria mexer em nada além de esconder linhas.
 
-O rótulo das réguas tinha o defeito espelhado: elas são recalculadas sobre o que
-está na tela — o que é proposital, e a dica dizia —, mas o texto visível dizia
-"média desta aba" mesmo com um estado filtrado. Hoje o rótulo diz de quem está
-falando: "desta aba", "de BA", ou "do que está na tela".
+A primeira correção errou a mão e tirou a renumeração dos dois, deixando a lista
+de um estado com números salteados. O que o defeito pedia era separar os dois
+casos, não unificá-los pelo outro lado.
+
+As réguas tinham o mesmo emaranhado: recalculadas sobre tudo que estava na tela,
+busca inclusive. Isso torna inútil justamente o uso principal — procurar o
+próprio nome para se comparar com a média compararia a pessoa consigo mesma. Hoje
+elas seguem o recorte, não a busca, e o rótulo diz de quem estão falando: "desta
+aba" ou "de BA".
+
+O auditor de DOM agora confere as duas regras separadamente, e com busca e
+estado combinados.
 
 **Deixar o ferramental fora do repositório.** Por dias os conferidores mais
 pesados — a aritmética refeita do zero, o DOM contra o payload, o contraste

@@ -993,7 +993,7 @@ function ligaTema() {
 // do pagina.py. Mudar um limiar lá muda a explicação aqui.
 const C = D.cfg;
 const AJUDA = {
-  pos: "Posição na aba inteira. Não muda com a busca nem com o filtro de estado, então com um deles ligado os números saem salteados. Como cada aba ordena por uma janela diferente, a mesma pessoa aparece em posições diferentes de uma para outra.",
+  pos: "Posição nesta aba, ou dentro do estado quando há um filtrado — o estado é um recorte e tem classificação própria. Procurar um nome não renumera nada: a busca acha a pessoa e mostra a posição que ela já tinha. Como cada aba ordena por uma janela diferente, a mesma pessoa aparece em posições diferentes de uma para outra.",
   editor: "Nome no Waze. Clique para abrir o perfil. Logo abaixo vêm o estado, o nível e os selos.",
   janela: {
     d30: `Edições feitas nos últimos ${C.janelaMedia} dias fechados.`,
@@ -1009,8 +1009,8 @@ const AJUDA = {
   uf: "Estado do editor, deduzido de qual ranking estadual ele aparece. Os rankings estaduais não se sobrepõem.",
   nivel: "Nível de editor no Waze. Sobe com experiência e dá mais permissões no editor de mapas.",
   regua: {
-    mediana: "Linha de referência, não é um editor. Metade de quem está na tela fez mais edições que isto, metade fez menos. Ao contrário da posição, ela acompanha o filtro de estado e a busca — o rótulo ao lado diz sobre quem ela está falando.",
-    media: "Linha de referência, não é um editor. É a soma das edições de quem está na tela dividida pelo número de editores. Ao contrário da posição, ela acompanha o filtro de estado e a busca — o rótulo ao lado diz sobre quem ela está falando.",
+    mediana: "Linha de referência, não é um editor. Metade da lista fez mais edições que isto, metade fez menos. Acompanha o filtro de estado — o rótulo ao lado diz sobre quem ela está falando — e não muda com a busca, para você poder procurar seu nome e se comparar com ela.",
+    media: "Linha de referência, não é um editor. É a soma das edições da lista dividida pelo número de editores. Acompanha o filtro de estado — o rótulo ao lado diz sobre quem ela está falando — e não muda com a busca, para você poder procurar seu nome e se comparar com ela.",
   },
   kpi: {
     ativos: `Quantas pessoas fizeram ao menos uma edição nos últimos ${C.janelaMedia} dias. A aba Histórico traz mais gente: lá entra também quem editou uma vez, anos atrás, e nunca voltou.`,
@@ -1032,25 +1032,34 @@ let aba = "d30";
 // [u, uf, lvl, tot, d7, d30, d90, streak, tend, semanas, mentees]
 const col = () => ABAS.find((a) => a[0] === aba)[2];
 
-// Cada item sai como [editor, posição na aba]. A posição é atribuída **antes**
-// de filtrar, de propósito: numerando o que sobrou na tela, buscar o próprio
-// nome mostrava "#1" para quem é #30 da aba, e filtrar um estado dava um
-// terceiro número para a mesma pessoa. Posição é ranking, não contagem de
-// linha — se muda com a busca, não é ranking nenhum.
-function linhas() {
-  const q = $("q").value.trim().toLowerCase();
+// Os dois controles não fazem a mesma coisa, e a diferença é o que a posição e
+// as réguas seguem.
+//
+// O estado troca o recorte: filtrar a Bahia é pedir o placar da Bahia, e ali
+// ser o segundo é ser o segundo. Renumerar é o certo.
+//
+// A busca não troca recorte nenhum — é procurar alguém dentro do que já está
+// escolhido. Renumerando ali, quem é o 30º da aba se via como "#1" ao digitar
+// o próprio nome. Por isso a posição e as réguas saem do escopo, e a busca só
+// esconde as linhas que não casam.
+function escopoLista() {
   const uf = $("uf").value;
   return D.abas[aba]
-    .map((i, n) => [D.editores[i], n + 1])
-    .filter(([e]) => (!uf || e[1] === uf) && (!q || e[0].toLowerCase().includes(q)));
+    .map((i) => D.editores[i])
+    .filter((e) => !uf || e[1] === uf);
 }
 
-// Como chamar o recorte que está na tela. As réguas são recalculadas sobre ele,
-// então dizer "desta aba" com um estado filtrado seria falso.
+function linhas() {
+  const q = $("q").value.trim().toLowerCase();
+  return escopoLista()
+    .map((e, n) => [e, n + 1])
+    .filter(([e]) => !q || e[0].toLowerCase().includes(q));
+}
+
+// De quem as réguas estão falando. Com um estado filtrado, dizer "desta aba"
+// seria falso — o valor é o daquele estado.
 function escopo() {
-  const q = $("q").value.trim();
   const uf = $("uf").value;
-  if (q) return "do que está na tela";
   return uf ? "de " + uf : "desta aba";
 }
 
@@ -1107,19 +1116,23 @@ function tend(t) {
 // As duas porque a distância entre elas é a própria concentração — numa
 // distribuição torta a média sobe muito acima do meio da lista, e quem só
 // visse a média concluiria que quase todo mundo produz pouco.
-// Recalculadas sobre o que está na tela: filtrou um estado, a régua é a
-// daquele estado. Somem quando sobra pouca gente para o valor significar algo.
-function reguas(lista, c) {
-  if (lista.length < C.refMin) return {};
-  const v = lista.map(([e]) => e[c]);
+// O valor sai do escopo — filtrou um estado, a régua é a daquele estado —, e a
+// busca não mexe nele: procurar o próprio nome é justamente para se comparar
+// com a régua, e uma régua calculada sobre o resultado da busca compararia a
+// pessoa consigo mesma. Somem quando o escopo tem pouca gente para o valor
+// significar algo.
+function reguas(escopoDe, visiveis, c) {
+  if (escopoDe.length < C.refMin) return {};
+  const v = escopoDe.map((e) => e[c]);
   const ord = v.slice().sort((a, b) => a - b);
   const mediana = ord[Math.floor(ord.length / 2)];
   const media = v.reduce((s, x) => s + x, 0) / v.length;
   // a lista já vem em ordem decrescente: a régua entra antes do primeiro
-  // registro que fica abaixo dela
+  // registro que fica abaixo dela — e o lugar é entre o que está na tela
+  const vis = visiveis.map(([e]) => e[c]);
   const onde = (x) => {
-    const i = v.findIndex((y) => y < x);
-    return i < 0 ? v.length : i;
+    const i = vis.findIndex((y) => y < x);
+    return i < 0 ? vis.length : i;
   };
   const r = {};
   const põe = (i, item) => { (r[i] = r[i] || []).push(item); };
@@ -1149,7 +1162,7 @@ function render() {
   const corta = !mostrarTudo && todas.length > C.linhasMax;
   const lista = corta ? todas.slice(0, C.linhasMax) : todas;
   const c = col();
-  const reg = reguas(todas, c);
+  const reg = reguas(escopoLista(), todas, c);
   const antes = (n) => (reg[n] || []).map((r) => linhaRegua(...r)).join("");
   $("body").innerHTML = lista.map(([e, pos], n) => `${antes(n)}<tr>
       <td class="pos">${pos}</td>

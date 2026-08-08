@@ -89,34 +89,52 @@ for (const largura of [390, 768, 1400]) {
         }
       });
 
-      // A posição tem que ser a da aba inteira, e não a contagem de linhas do
-      // que sobrou na tela. Buscar o próprio nome mostrava "#1" para quem é
-      // #30 — e como sem filtro a posição É o índice, a conferência acima
-      // passava. Aqui o filtro entra ligado.
+      // Os dois controles têm regras diferentes, e a conferência acima — que
+      // compara posição com índice, sem filtro — não distingue as duas.
+      //
+      //   estado  troca o recorte: renumera de 1, é o placar daquele estado
+      //   busca   procura dentro do recorte: NÃO renumera
+      //
+      // Buscar o próprio nome mostrava "#1" para quem é #30 da aba.
       const posDe = (nome) => {
         const tr = [...document.querySelectorAll('#body tr')].find(
           (x) => (x.querySelector('.name a') || {}).textContent === nome);
         return tr ? tr.children[0].textContent.trim() : null;
       };
       const alvo = D.editores[idx[Math.min(idx.length - 1, teto - 1)]];
+      const q = document.getElementById('q');
+      const sel = document.getElementById('uf');
       if (alvo) {
-        const esperada = String(idx.indexOf(D.editores.indexOf(alvo)) + 1);
-        const q = document.getElementById('q');
-        const sel = document.getElementById('uf');
-        for (const [rot, aplica, limpa] of [
-          ['busca', () => { q.value = alvo[0]; q.oninput(); },
-            () => { q.value = ''; q.oninput(); }],
-          ['filtro de estado', () => { sel.value = alvo[1] || ''; sel.onchange(); },
-            () => { sel.value = ''; sel.onchange(); }],
-        ]) {
-          aplica();
+        const naAba = String(idx.indexOf(D.editores.indexOf(alvo)) + 1);
+        // buscar não pode mudar a posição que a pessoa já tinha
+        q.value = alvo[0]; q.oninput();
+        out.n++;
+        if (posDe(alvo[0]) !== naAba) {
+          out.probs.push('aba ' + k + ' com busca: ' + alvo[0] + ' aparece em #' +
+            posDe(alvo[0]) + ' e é #' + naAba + ' da aba');
+        }
+        q.value = ''; q.oninput();
+
+        // filtrar o estado renumera de 1, e a busca dentro dele também não mexe
+        if (alvo[1]) {
+          const noEstado = String(idx.map((i) => D.editores[i])
+            .filter((e) => e[1] === alvo[1]).indexOf(alvo) + 1);
+          sel.value = alvo[1]; sel.onchange();
           out.n++;
-          const viu = posDe(alvo[0]);
-          if (viu !== esperada) {
-            out.probs.push('aba ' + k + ' com ' + rot + ': ' + alvo[0] +
-              ' aparece em #' + viu + ' e é #' + esperada + ' da aba');
+          if (posDe(alvo[0]) !== noEstado) {
+            out.probs.push('aba ' + k + ' filtrando ' + alvo[1] + ': ' + alvo[0] +
+              ' aparece em #' + posDe(alvo[0]) + ' e é #' + noEstado +
+              ' do estado');
           }
-          limpa();
+          q.value = alvo[0]; q.oninput();
+          out.n++;
+          if (posDe(alvo[0]) !== noEstado) {
+            out.probs.push('aba ' + k + ' filtrando ' + alvo[1] +
+              ' e buscando: ' + alvo[0] + ' aparece em #' + posDe(alvo[0]) +
+              ' e é #' + noEstado + ' do estado');
+          }
+          q.value = ''; q.oninput();
+          sel.value = ''; sel.onchange();
         }
       }
 

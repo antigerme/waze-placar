@@ -61,14 +61,18 @@ de dez nós, e montar tudo travava um celular modesto por quase três segundos a
 cada troca de aba. A busca e o filtro de estado continuam procurando em todo
 mundo.
 
-Dentro da tabela, duas réguas marcam onde cai o editor típico e onde cai a
-média. São linhas de referência, não pessoas: sem posição, sem selo e sem link.
-Acompanham o filtro de estado e a busca, dizem no rótulo sobre quem estão
-falando, e somem quando sobra pouca gente na tela para o valor significar algo.
+Os dois controles acima da tabela não fazem a mesma coisa, e a posição e as
+réguas seguem essa diferença. O estado troca o recorte: filtrar a Bahia é pedir
+o placar da Bahia, então ali a numeração recomeça do primeiro e as réguas são as
+daquele estado. A busca só procura dentro do recorte escolhido — ela esconde as
+outras linhas, e nada mais: quem é o trigésimo continua aparecendo como
+trigésimo ao digitar o próprio nome.
 
-A posição, ao contrário, é sempre a da aba inteira: buscar um nome ou filtrar um
-estado não renumera ninguém, então com um filtro ligado os números saem
-salteados. É de propósito — posição que muda com a busca não é posição.
+As réguas marcam onde cai o editor típico e onde cai a média. São linhas de
+referência, não pessoas: sem posição, sem selo e sem link. O rótulo diz de quem
+elas estão falando, e elas somem quando o recorte tem pouca gente para o valor
+significar algo. Como a busca não as recalcula, procurar o próprio nome é o
+jeito rápido de se ver contra elas.
 
 Em "A caminho do próximo nível" a ordem é atividade, não acumulado: quem já
 bateu o limiar aparece por edições da janela, e quem ainda não, pelo prazo que
