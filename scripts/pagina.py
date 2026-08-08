@@ -993,7 +993,7 @@ function ligaTema() {
 // do pagina.py. Mudar um limiar lá muda a explicação aqui.
 const C = D.cfg;
 const AJUDA = {
-  pos: "Posição nesta aba. Como cada aba ordena por uma janela diferente, a mesma pessoa aparece em posições diferentes.",
+  pos: "Posição nesta aba, ou dentro do estado quando há um filtrado — o estado é um recorte e tem classificação própria. Procurar um nome não renumera nada: a busca acha a pessoa e mostra a posição que ela já tinha. Como cada aba ordena por uma janela diferente, a mesma pessoa aparece em posições diferentes de uma para outra.",
   editor: "Nome no Waze. Clique para abrir o perfil. Logo abaixo vêm o estado, o nível e os selos.",
   janela: {
     d30: `Edições feitas nos últimos ${C.janelaMedia} dias fechados.`,
@@ -1009,8 +1009,8 @@ const AJUDA = {
   uf: "Estado do editor, deduzido de qual ranking estadual ele aparece. Os rankings estaduais não se sobrepõem.",
   nivel: "Nível de editor no Waze. Sobe com experiência e dá mais permissões no editor de mapas.",
   regua: {
-    mediana: "Linha de referência, não é um editor. Metade de quem aparece nesta aba fez mais edições que isto, metade fez menos. Acompanha o filtro de estado e a busca.",
-    media: "Linha de referência, não é um editor. É a soma das edições desta aba dividida pelo número de editores. Acompanha o filtro de estado e a busca.",
+    mediana: "Linha de referência, não é um editor. Metade da lista fez mais edições que isto, metade fez menos. Acompanha o filtro de estado — o rótulo ao lado diz sobre quem ela está falando — e não muda com a busca, para você poder procurar seu nome e se comparar com ela.",
+    media: "Linha de referência, não é um editor. É a soma das edições da lista dividida pelo número de editores. Acompanha o filtro de estado — o rótulo ao lado diz sobre quem ela está falando — e não muda com a busca, para você poder procurar seu nome e se comparar com ela.",
   },
   kpi: {
     ativos: `Quantas pessoas fizeram ao menos uma edição nos últimos ${C.janelaMedia} dias. A aba Histórico traz mais gente: lá entra também quem editou uma vez, anos atrás, e nunca voltou.`,
@@ -1032,12 +1032,35 @@ let aba = "d30";
 // [u, uf, lvl, tot, d7, d30, d90, streak, tend, semanas, mentees]
 const col = () => ABAS.find((a) => a[0] === aba)[2];
 
-function linhas() {
-  const q = $("q").value.trim().toLowerCase();
+// Os dois controles não fazem a mesma coisa, e a diferença é o que a posição e
+// as réguas seguem.
+//
+// O estado troca o recorte: filtrar a Bahia é pedir o placar da Bahia, e ali
+// ser o segundo é ser o segundo. Renumerar é o certo.
+//
+// A busca não troca recorte nenhum — é procurar alguém dentro do que já está
+// escolhido. Renumerando ali, quem é o 30º da aba se via como "#1" ao digitar
+// o próprio nome. Por isso a posição e as réguas saem do escopo, e a busca só
+// esconde as linhas que não casam.
+function escopoLista() {
   const uf = $("uf").value;
   return D.abas[aba]
     .map((i) => D.editores[i])
-    .filter((e) => (!uf || e[1] === uf) && (!q || e[0].toLowerCase().includes(q)));
+    .filter((e) => !uf || e[1] === uf);
+}
+
+function linhas() {
+  const q = $("q").value.trim().toLowerCase();
+  return escopoLista()
+    .map((e, n) => [e, n + 1])
+    .filter(([e]) => !q || e[0].toLowerCase().includes(q));
+}
+
+// De quem as réguas estão falando. Com um estado filtrado, dizer "desta aba"
+// seria falso — o valor é o daquele estado.
+function escopo() {
+  const uf = $("uf").value;
+  return uf ? "de " + uf : "desta aba";
 }
 
 function faisca(sem) {
@@ -1093,19 +1116,23 @@ function tend(t) {
 // As duas porque a distância entre elas é a própria concentração — numa
 // distribuição torta a média sobe muito acima do meio da lista, e quem só
 // visse a média concluiria que quase todo mundo produz pouco.
-// Recalculadas sobre o que está na tela: filtrou um estado, a régua é a
-// daquele estado. Somem quando sobra pouca gente para o valor significar algo.
-function reguas(lista, c) {
-  if (lista.length < C.refMin) return {};
-  const v = lista.map((e) => e[c]);
+// O valor sai do escopo — filtrou um estado, a régua é a daquele estado —, e a
+// busca não mexe nele: procurar o próprio nome é justamente para se comparar
+// com a régua, e uma régua calculada sobre o resultado da busca compararia a
+// pessoa consigo mesma. Somem quando o escopo tem pouca gente para o valor
+// significar algo.
+function reguas(escopoDe, visiveis, c) {
+  if (escopoDe.length < C.refMin) return {};
+  const v = escopoDe.map((e) => e[c]);
   const ord = v.slice().sort((a, b) => a - b);
   const mediana = ord[Math.floor(ord.length / 2)];
   const media = v.reduce((s, x) => s + x, 0) / v.length;
   // a lista já vem em ordem decrescente: a régua entra antes do primeiro
-  // registro que fica abaixo dela
+  // registro que fica abaixo dela — e o lugar é entre o que está na tela
+  const vis = visiveis.map(([e]) => e[c]);
   const onde = (x) => {
-    const i = v.findIndex((y) => y < x);
-    return i < 0 ? v.length : i;
+    const i = vis.findIndex((y) => y < x);
+    return i < 0 ? vis.length : i;
   };
   const r = {};
   const põe = (i, item) => { (r[i] = r[i] || []).push(item); };
@@ -1117,7 +1144,7 @@ function reguas(lista, c) {
 function linhaRegua(rot, valor, ajuda) {
   return `<tr class="regua" title="${ajuda}">
       <td class="pos"></td>
-      <td class="name">${rot} desta aba</td>
+      <td class="name">${rot} ${escopo()}</td>
       <td class="c-spark"></td>
       <td class="num">${NF.format(valor)}</td>
       <td class="num c-seq"></td>
@@ -1135,10 +1162,10 @@ function render() {
   const corta = !mostrarTudo && todas.length > C.linhasMax;
   const lista = corta ? todas.slice(0, C.linhasMax) : todas;
   const c = col();
-  const reg = reguas(todas, c);
+  const reg = reguas(escopoLista(), todas, c);
   const antes = (n) => (reg[n] || []).map((r) => linhaRegua(...r)).join("");
-  $("body").innerHTML = lista.map((e, n) => `${antes(n)}<tr>
-      <td class="pos">${n + 1}</td>
+  $("body").innerHTML = lista.map(([e, pos], n) => `${antes(n)}<tr>
+      <td class="pos">${pos}</td>
       <td class="name"><a href="${esc(perfil(e[0]))}" target="_blank"
          rel="noopener noreferrer" title="Ver perfil de ${esc(e[0])} no Waze"
          >${esc(e[0])}</a>
