@@ -169,6 +169,22 @@ dos doze nomes. É o mesmo erro que o placar inteiro existe para não cometer, e
 foi cometido dentro dele. O `verificar.py` monta o painel com quatro
 sintéticos em que as duas ordens são opostas e falha se a antiga voltar.
 
+**Numerar as linhas em vez de mostrar a posição.** A coluna `#` vinha do índice
+do que sobrava na tela. Sem filtro, índice e posição coincidem, e por isso
+passou por toda conferência: o auditor de DOM comparava posição com índice, que
+é a mesma conta. Com a busca ligada, quem é o 30º da aba se via como `#1`.
+Filtrando o estado, um terceiro número. Foi um editor procurando o próprio nome
+que percebeu — três posições para a mesma pessoa, na mesma aba, com os mesmos
+números ao lado.
+
+Hoje a posição é atribuída antes de filtrar, e o auditor de DOM confere com o
+filtro ligado, não só sem ele. Posição que muda com a busca não é posição.
+
+O rótulo das réguas tinha o defeito espelhado: elas são recalculadas sobre o que
+está na tela — o que é proposital, e a dica dizia —, mas o texto visível dizia
+"média desta aba" mesmo com um estado filtrado. Hoje o rótulo diz de quem está
+falando: "desta aba", "de BA", ou "do que está na tela".
+
 **Deixar o ferramental fora do repositório.** Por dias os conferidores mais
 pesados — a aritmética refeita do zero, o DOM contra o payload, o contraste
 composto — moraram num diretório temporário de sessão. Rodavam, achavam

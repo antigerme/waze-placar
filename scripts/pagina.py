@@ -993,7 +993,7 @@ function ligaTema() {
 // do pagina.py. Mudar um limiar lá muda a explicação aqui.
 const C = D.cfg;
 const AJUDA = {
-  pos: "Posição nesta aba. Como cada aba ordena por uma janela diferente, a mesma pessoa aparece em posições diferentes.",
+  pos: "Posição na aba inteira. Não muda com a busca nem com o filtro de estado, então com um deles ligado os números saem salteados. Como cada aba ordena por uma janela diferente, a mesma pessoa aparece em posições diferentes de uma para outra.",
   editor: "Nome no Waze. Clique para abrir o perfil. Logo abaixo vêm o estado, o nível e os selos.",
   janela: {
     d30: `Edições feitas nos últimos ${C.janelaMedia} dias fechados.`,
@@ -1009,8 +1009,8 @@ const AJUDA = {
   uf: "Estado do editor, deduzido de qual ranking estadual ele aparece. Os rankings estaduais não se sobrepõem.",
   nivel: "Nível de editor no Waze. Sobe com experiência e dá mais permissões no editor de mapas.",
   regua: {
-    mediana: "Linha de referência, não é um editor. Metade de quem aparece nesta aba fez mais edições que isto, metade fez menos. Acompanha o filtro de estado e a busca.",
-    media: "Linha de referência, não é um editor. É a soma das edições desta aba dividida pelo número de editores. Acompanha o filtro de estado e a busca.",
+    mediana: "Linha de referência, não é um editor. Metade de quem está na tela fez mais edições que isto, metade fez menos. Ao contrário da posição, ela acompanha o filtro de estado e a busca — o rótulo ao lado diz sobre quem ela está falando.",
+    media: "Linha de referência, não é um editor. É a soma das edições de quem está na tela dividida pelo número de editores. Ao contrário da posição, ela acompanha o filtro de estado e a busca — o rótulo ao lado diz sobre quem ela está falando.",
   },
   kpi: {
     ativos: `Quantas pessoas fizeram ao menos uma edição nos últimos ${C.janelaMedia} dias. A aba Histórico traz mais gente: lá entra também quem editou uma vez, anos atrás, e nunca voltou.`,
@@ -1032,12 +1032,26 @@ let aba = "d30";
 // [u, uf, lvl, tot, d7, d30, d90, streak, tend, semanas, mentees]
 const col = () => ABAS.find((a) => a[0] === aba)[2];
 
+// Cada item sai como [editor, posição na aba]. A posição é atribuída **antes**
+// de filtrar, de propósito: numerando o que sobrou na tela, buscar o próprio
+// nome mostrava "#1" para quem é #30 da aba, e filtrar um estado dava um
+// terceiro número para a mesma pessoa. Posição é ranking, não contagem de
+// linha — se muda com a busca, não é ranking nenhum.
 function linhas() {
   const q = $("q").value.trim().toLowerCase();
   const uf = $("uf").value;
   return D.abas[aba]
-    .map((i) => D.editores[i])
-    .filter((e) => (!uf || e[1] === uf) && (!q || e[0].toLowerCase().includes(q)));
+    .map((i, n) => [D.editores[i], n + 1])
+    .filter(([e]) => (!uf || e[1] === uf) && (!q || e[0].toLowerCase().includes(q)));
+}
+
+// Como chamar o recorte que está na tela. As réguas são recalculadas sobre ele,
+// então dizer "desta aba" com um estado filtrado seria falso.
+function escopo() {
+  const q = $("q").value.trim();
+  const uf = $("uf").value;
+  if (q) return "do que está na tela";
+  return uf ? "de " + uf : "desta aba";
 }
 
 function faisca(sem) {
@@ -1097,7 +1111,7 @@ function tend(t) {
 // daquele estado. Somem quando sobra pouca gente para o valor significar algo.
 function reguas(lista, c) {
   if (lista.length < C.refMin) return {};
-  const v = lista.map((e) => e[c]);
+  const v = lista.map(([e]) => e[c]);
   const ord = v.slice().sort((a, b) => a - b);
   const mediana = ord[Math.floor(ord.length / 2)];
   const media = v.reduce((s, x) => s + x, 0) / v.length;
@@ -1117,7 +1131,7 @@ function reguas(lista, c) {
 function linhaRegua(rot, valor, ajuda) {
   return `<tr class="regua" title="${ajuda}">
       <td class="pos"></td>
-      <td class="name">${rot} desta aba</td>
+      <td class="name">${rot} ${escopo()}</td>
       <td class="c-spark"></td>
       <td class="num">${NF.format(valor)}</td>
       <td class="num c-seq"></td>
@@ -1137,8 +1151,8 @@ function render() {
   const c = col();
   const reg = reguas(todas, c);
   const antes = (n) => (reg[n] || []).map((r) => linhaRegua(...r)).join("");
-  $("body").innerHTML = lista.map((e, n) => `${antes(n)}<tr>
-      <td class="pos">${n + 1}</td>
+  $("body").innerHTML = lista.map(([e, pos], n) => `${antes(n)}<tr>
+      <td class="pos">${pos}</td>
       <td class="name"><a href="${esc(perfil(e[0]))}" target="_blank"
          rel="noopener noreferrer" title="Ver perfil de ${esc(e[0])} no Waze"
          >${esc(e[0])}</a>

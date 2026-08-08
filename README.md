@@ -62,9 +62,13 @@ cada troca de aba. A busca e o filtro de estado continuam procurando em todo
 mundo.
 
 Dentro da tabela, duas réguas marcam onde cai o editor típico e onde cai a
-média da aba. São linhas de referência, não pessoas: sem posição, sem selo e
-sem link. Acompanham o filtro de estado e a busca, e somem quando sobra pouca
-gente na tela para o valor significar algo.
+média. São linhas de referência, não pessoas: sem posição, sem selo e sem link.
+Acompanham o filtro de estado e a busca, dizem no rótulo sobre quem estão
+falando, e somem quando sobra pouca gente na tela para o valor significar algo.
+
+A posição, ao contrário, é sempre a da aba inteira: buscar um nome ou filtrar um
+estado não renumera ninguém, então com um filtro ligado os números saem
+salteados. É de propósito — posição que muda com a busca não é posição.
 
 Em "A caminho do próximo nível" a ordem é atividade, não acumulado: quem já
 bateu o limiar aparece por edições da janela, e quem ainda não, pelo prazo que

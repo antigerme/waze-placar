@@ -89,6 +89,37 @@ for (const largura of [390, 768, 1400]) {
         }
       });
 
+      // A posição tem que ser a da aba inteira, e não a contagem de linhas do
+      // que sobrou na tela. Buscar o próprio nome mostrava "#1" para quem é
+      // #30 — e como sem filtro a posição É o índice, a conferência acima
+      // passava. Aqui o filtro entra ligado.
+      const posDe = (nome) => {
+        const tr = [...document.querySelectorAll('#body tr')].find(
+          (x) => (x.querySelector('.name a') || {}).textContent === nome);
+        return tr ? tr.children[0].textContent.trim() : null;
+      };
+      const alvo = D.editores[idx[Math.min(idx.length - 1, teto - 1)]];
+      if (alvo) {
+        const esperada = String(idx.indexOf(D.editores.indexOf(alvo)) + 1);
+        const q = document.getElementById('q');
+        const sel = document.getElementById('uf');
+        for (const [rot, aplica, limpa] of [
+          ['busca', () => { q.value = alvo[0]; q.oninput(); },
+            () => { q.value = ''; q.oninput(); }],
+          ['filtro de estado', () => { sel.value = alvo[1] || ''; sel.onchange(); },
+            () => { sel.value = ''; sel.onchange(); }],
+        ]) {
+          aplica();
+          out.n++;
+          const viu = posDe(alvo[0]);
+          if (viu !== esperada) {
+            out.probs.push('aba ' + k + ' com ' + rot + ': ' + alvo[0] +
+              ' aparece em #' + viu + ' e é #' + esperada + ' da aba');
+          }
+          limpa();
+        }
+      }
+
       // KPIs
       const kpis = [...document.querySelectorAll('.kpi b')].map((x) => x.textContent.trim());
       const R = D.resumo;
