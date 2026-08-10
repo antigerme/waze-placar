@@ -1130,21 +1130,32 @@ function reguas(escopoDe, visiveis, c) {
   // a lista já vem em ordem decrescente: a régua entra antes do primeiro
   // registro que fica abaixo dela — e o lugar é entre o que está na tela
   const vis = visiveis.map(([e]) => e[c]);
-  const onde = (x) => {
-    const i = vis.findIndex((y) => y < x);
-    return i < 0 ? vis.length : i;
+  const onde = (lista, x) => {
+    const i = lista.findIndex((y) => y < x);
+    return i < 0 ? lista.length : i;
   };
   const r = {};
-  const põe = (i, item) => { (r[i] = r[i] || []).push(item); };
-  põe(onde(media), ["média", Math.round(media), AJUDA.regua.media]);
-  põe(onde(mediana), ["mediana", mediana, AJUDA.regua.mediana]);
+  // Além do lugar entre o que está na tela, vai a posição no escopo: é o que a
+  // régua diz quando o desenho para antes de ela chegar.
+  const põe = (rot, x, ajuda) => {
+    const i = onde(vis, x);
+    (r[i] = r[i] || []).push([rot, Math.round(x), ajuda, onde(v, x) + 1]);
+  };
+  põe("média", media, AJUDA.regua.media);
+  põe("mediana", mediana, AJUDA.regua.mediana);
   return r;
 }
 
-function linhaRegua(rot, valor, ajuda) {
-  return `<tr class="regua" title="${ajuda}">
+function linhaRegua(rot, valor, ajuda, pos, presa) {
+  // Presa = a régua cairia abaixo do pedaço desenhado. Em vez de sumir, ela
+  // encosta no fim do que está na tela e diz em que posição fica de verdade.
+  const onde = presa ? " · " + NF.format(pos) + "ª posição" : "";
+  const extra = presa
+    ? " Fica na " + NF.format(pos) + "ª posição, abaixo do pedaço desenhado."
+    : "";
+  return `<tr class="regua" title="${ajuda}${extra}">
       <td class="pos"></td>
-      <td class="name">${rot} ${escopo()}</td>
+      <td class="name">${rot} ${escopo()}${onde}</td>
       <td class="c-spark"></td>
       <td class="num">${NF.format(valor)}</td>
       <td class="num c-seq"></td>
@@ -1163,6 +1174,21 @@ function render() {
   const lista = corta ? todas.slice(0, C.linhasMax) : todas;
   const c = col();
   const reg = reguas(escopoLista(), todas, c);
+  // Régua que cai além do pedaço desenhado não pode simplesmente sumir. No
+  // Histórico inteiro a mediana fica lá pela metade da lista, e a página
+  // passava a mostrar só a média — que numa distribuição torta é exatamente a
+  // leitura que as duas réguas existem para evitar. Presas no fim do desenho,
+  // com a posição real escrita ao lado.
+  if (corta) {
+    const presas = [];
+    for (const k of Object.keys(reg)) {
+      if (+k >= lista.length) {
+        presas.push(...reg[k].map((r) => r.concat([true])));
+        delete reg[k];
+      }
+    }
+    if (presas.length) reg[lista.length] = presas;
+  }
   const antes = (n) => (reg[n] || []).map((r) => linhaRegua(...r)).join("");
   $("body").innerHTML = lista.map(([e, pos], n) => `${antes(n)}<tr>
       <td class="pos">${pos}</td>
@@ -1178,7 +1204,7 @@ function render() {
       <td class="num c-seq" title="${e[7] ? e[7] + " dia(s) seguidos editando" : "Não está numa sequência"}">${e[7] || ""}</td>
       <td class="num c-tend">${tend(e[8])}</td>
       <td class="num c-hist" title="${NF.format(e[3])} edições desde a primeira">${NF.format(e[3])}</td>
-    </tr>`).join("") + (corta ? "" : antes(lista.length));
+    </tr>`).join("") + antes(lista.length);
   $("resto").hidden = !corta;
   if (corta) {
     $("restoTexto").textContent = "Mostrando " + NF.format(lista.length) +

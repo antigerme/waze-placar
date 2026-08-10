@@ -138,6 +138,54 @@ for (const largura of [390, 768, 1400]) {
         }
       }
 
+      // As réguas, em cada estado que a aba oferece. O valor sai do escopo, e
+      // as duas têm que aparecer sempre que o escopo for grande o bastante —
+      // no Histórico inteiro a mediana caía além do pedaço desenhado e sumia,
+      // deixando só a média, que é a leitura que as duas existem para evitar.
+      // A lista de estados é remontada por aba: pedir um que não existe nela
+      // faz o select cair para "todos" calado, e a conferência vira mentira.
+      const selUf = document.getElementById('uf');
+      for (const uf of [...selUf.options].map((o) => o.value)) {
+        selUf.value = uf;
+        if (selUf.value !== uf) { out.probs.push('estado ' + uf + ' sumiu da aba ' + k); continue; }
+        selUf.onchange();
+        const escopo = idx.map((i) => D.editores[i]).filter((e) => !uf || e[1] === uf);
+        const v = escopo.map((e) => e[COL[k]]);
+        const ord = v.slice().sort((a, b) => a - b);
+        const espera = {
+          mediana: ord[Math.floor(ord.length / 2)],
+          média: Math.round(v.reduce((s, x) => s + x, 0) / v.length),
+        };
+        const vistas = {};
+        for (const tr of document.querySelectorAll('tr.regua')) {
+          const rot = tr.children[1].textContent.trim();
+          vistas[rot.split(' ')[0]] = {
+            rotulo: rot,
+            valor: Number(tr.children[3].textContent.replace(/\./g, '')),
+          };
+        }
+        const onde = uf ? 'aba ' + k + '/' + uf : 'aba ' + k;
+        if (v.length < D.cfg.refMin) {
+          out.n++;
+          if (Object.keys(vistas).length) {
+            out.probs.push(onde + ': régua desenhada com só ' + v.length + ' editor(es)');
+          }
+          continue;
+        }
+        for (const rot of Object.keys(espera)) {
+          out.n++;
+          if (!(rot in vistas)) {
+            out.probs.push(onde + ': a régua de ' + rot + ' não foi desenhada');
+          } else if (vistas[rot].valor !== espera[rot]) {
+            out.probs.push(onde + ': ' + rot + ' desenhada ' + vistas[rot].valor +
+              ' e o escopo dá ' + espera[rot]);
+          } else if (uf && !vistas[rot].rotulo.includes(uf)) {
+            out.probs.push(onde + ': rótulo "' + vistas[rot].rotulo + '" não diz de quem fala');
+          }
+        }
+      }
+      selUf.value = ''; selUf.onchange();
+
       // KPIs
       const kpis = [...document.querySelectorAll('.kpi b')].map((x) => x.textContent.trim());
       const R = D.resumo;
