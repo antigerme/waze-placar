@@ -74,6 +74,11 @@ elas estão falando, e elas somem quando o recorte tem pouca gente para o valor
 significar algo. Como a busca não as recalcula, procurar o próprio nome é o
 jeito rápido de se ver contra elas.
 
+Cada régua entra na posição onde o valor dela cai. Quando essa posição fica além
+do pedaço desenhado — o que acontece com a mediana do Histórico, lá pela metade
+de milhares de linhas —, ela encosta no fim da tabela e diz em que posição está
+de verdade, em vez de sumir e deixar só a média.
+
 Em "A caminho do próximo nível" a ordem é atividade, não acumulado: quem já
 bateu o limiar aparece por edições da janela, e quem ainda não, pelo prazo que
 o ritmo da janela daria — o que falta dividido pela produção diária. Ordenado

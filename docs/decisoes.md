@@ -169,6 +169,27 @@ dos doze nomes. É o mesmo erro que o placar inteiro existe para não cometer, e
 foi cometido dentro dele. O `verificar.py` monta o painel com quatro
 sintéticos em que as duas ordens são opostas e falha se a antiga voltar.
 
+**Deixar o teto de linhas engolir a régua da mediana.** As duas réguas existem
+porque só a média engana numa distribuição torta — está escrito mais abaixo, na
+decisão que rejeitou marcar só a média. Só que a régua entra na posição onde o
+valor cai, e a tabela desenha um pedaço por vez: no Histórico inteiro a mediana
+cai na 1.462ª linha de 2.620, muito além das 300 desenhadas, então ela
+simplesmente não aparecia. Sobrava a média — 23.648 contra uma mediana de 3 —,
+exatamente a leitura que as duas réguas existem para evitar, na aba mais cheia
+da página.
+
+Passou porque cada peça estava certa sozinha: o valor batia, o teto era
+proposital, e conferir "a régua mostra o número certo" não pergunta se ela
+chegou a ser desenhada. Hoje a régua que cai além do corte encosta no fim do
+que está na tela e diz em que posição fica de verdade. O auditor de DOM percorre
+aba por estado — 100 combinações na coleta em que foi escrito — e falha se uma
+régua com escopo suficiente não for desenhada.
+
+Cuidado ao medir isto por fora: a lista de estados é remontada por aba, com só
+os estados que têm gente nela. Pedir "AC" na aba de 7 dias põe o `select` em
+"todos" sem reclamar, e a conferência passa a medir outra coisa — três falsos
+positivos aqui antes de eu perceber.
+
 **Tratar busca e filtro de estado como a mesma coisa.** A coluna `#` vinha do
 índice do que sobrava na tela, depois dos dois controles. Sem filtro, índice e
 posição coincidem — e por isso passou por toda conferência, inclusive pelo
