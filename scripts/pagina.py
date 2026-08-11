@@ -560,6 +560,27 @@ def prepara(perfis, ufs, gerado, areas=None, estat=None, extras=None,
         "diasMax": max(dias_tx) if dias_tx else 0,
     }
 
+    # --- alcance da coleta ---------------------------------------------------
+    # De onde saiu cada editor do universo, e o que a fonte deixa de fora. Os
+    # dois endpoints de mentoria só contam quem ainda não estava: o `universo()`
+    # acrescenta os novatos antes dos candidatos, então as duas contagens não se
+    # sobrepõem e a subtração fecha. Medido contra o universo, e não contra os
+    # perfis coletados — perfil que falhou some destes, e a conta sairia errada.
+    _univ = estat.get("universo") or 0
+    _nov = estat.get("novatosForaDoRanking") or 0
+    _cand = estat.get("candidatosForaDoRanking") or 0
+    cobertura = {
+        "universo": _univ,
+        "porRanking": max(0, _univ - _nov - _cand),
+        "novatos": _nov,
+        "candidatos": _cand,
+        "perfis": len(eds),
+        # o que a varredura das janelas custou e o que ela devolveu
+        "linhasJanela": estat.get("linhasJanela") or 0,
+        "semEdicaoPct": estat.get("semEdicaoPct") or 0,
+        "ativosJanela": estat.get("ativosJanela") or 0,
+    }
+
     ativos30 = len(abas["d30"])
     return {
         "gerado": gerado,
@@ -647,6 +668,7 @@ def prepara(perfis, ufs, gerado, areas=None, estat=None, extras=None,
             "atividade": atividade,
             "forasteiros": forasteiros[:8],
             "candidatos": candidatos,
+            "cobertura": cobertura,
             "mapa": _grade_cobertura(areas, ufs),
         },
     }
@@ -1109,7 +1131,7 @@ function tend(t) {
   if (t < -C.tendBanda) {
     return '<span class="down"' + cap(`Fez ${Math.abs(t)}% menos edições nos últimos ${C.meta} dias do que nos ${C.meta} anteriores.`) + ">↓ " + Math.abs(t) + "%</span>";
   }
-  return '<span class="flat"' + cap(`Ritmo estável: a variação entre as duas metades da janela ficou dentro de ${C.tendBanda}%.`) + ">→</span>";
+  return '<span class="flat"' + cap(`Ritmo estável: a variação entre as metades da janela ficou dentro de ${C.tendBanda}%.`) + ">→</span>";
 }
 
 // Réguas dentro da tabela: onde cai o editor típico e onde cai a média.
@@ -1390,6 +1412,44 @@ function mapa(m) {
     </p></div>`;
 }
 
+// Quem o placar alcança, e por onde. Existe porque a pergunta mais comum de
+// quem não se acha na lista é "por que eu não estou aqui?", e a resposta é
+// medível: o ranking do Waze ordena por pontos, corta num teto fixo, e quem
+// edita muito sem pontuar fica abaixo do corte. O painel não estima quantos
+// são — a fonte não consegue mostrar quem ela esconde. Mostra o que dá para
+// medir: quanto os endpoints fora do ranking acrescentaram.
+function alcance(c) {
+  if (!c || !c.universo) return "";
+  const itens = [
+    ["rankings", c.porRanking],
+    ["novatos", c.novatos],
+    ["candidatos", c.candidatos],
+  ].filter(([, v]) => v > 0);
+  const foraDoRanking = c.novatos + c.candidatos;
+  const pctFora = Math.round(100 * foraDoRanking / c.universo);
+  return `<div class="painel largo"><h2>Alcance da coleta</h2>
+    ${barras(itens, (v) => NF.format(v), (k, v) =>
+      NF.format(v) + " editores entraram no placar por " + k + ".")}
+    <p style="color:var(--muted);font-size:.8rem;margin:12px 0 0">
+    O universo tem <b>${NF.format(c.universo)}</b> editores${
+      c.perfis && c.perfis !== c.universo
+        ? `, dos quais <b>${NF.format(c.perfis)}</b> tiveram o perfil lido` : ""}.
+    <b>${NF.format(foraDoRanking)}</b> deles — ${pctFora}% — não apareciam em
+    ranking nenhum e entraram pela lista de novatos ou pela de candidatos a
+    subir de nível.${c.linhasJanela ? ` As varreduras das janelas curtas
+    leram <b>${NF.format(c.linhasJanela)}</b> linhas e devolveram
+    <b>${NF.format(c.ativosJanela)}</b> editores com alguma edição:
+    ${c.semEdicaoPct}% das linhas são de quem não editou no período, porque o
+    ranking do Waze ordena por pontos, que somam dirigir e editar.` : ""}</p>
+    <p style="color:var(--muted);font-size:.8rem;margin:8px 0 0">
+    Por isso <b>o placar não é um censo</b>. Cada quadro do Waze corta em
+    ${NF.format(D.cfg.cap)} linhas e não pagina, então quem edita muito e
+    pontua pouco fica abaixo do corte em todos os
+    ${NF.format(D.cfg.rankings)} — e só entra aqui se algum dos outros
+    endpoints o alcançar. Quantos são não dá para dizer: a fonte não mostra
+    quem ela não lista.</p></div>`;
+}
+
 function paineis() {
   const p = D.paineis;
   const blocos = [];
@@ -1614,7 +1674,7 @@ function paineis() {
            conta não vem no dado — por isso a página não cita quantas edições
            faltam`
         : ", e o que entra nessa conta não vem no dado"}.
-      As duas listas são ordenadas por atividade, não por acumulado: quem já
+      As listas são ordenadas por atividade, não por acumulado: quem já
       chegou, pelas edições da janela; quem ainda não, pelo prazo que o ritmo da
       janela daria. Esse prazo é o que falta até o limiar dividido pelo ritmo
       medido, e vale enquanto o ritmo valer — é projeção, não previsão.
@@ -1639,7 +1699,7 @@ function paineis() {
      Fatia que editou nos últimos ${D.cfg.janela} dias, entre os
      ${NF.format(mt.rastreados)} apadrinhados que a coleta conseguiu olhar
      — ${mt.cobertura}% dos nomeados — e entre os demais editores. Os
-     dois lado a lado não mostram que apadrinhar faz ficar. Quem vira afilhado
+     números lado a lado não mostram que apadrinhar faz ficar. Quem vira afilhado
      não é sorteado, e esta coleta não tem como separar o efeito do
      apadrinhamento de quem já ia continuar de todo jeito.</p>
      <table><thead><tr>
@@ -1683,6 +1743,7 @@ function paineis() {
   blocos.push(calendario(p));
   blocos.push(mapaAtividade(p.atividade));
   blocos.push(mapa(p.mapa));
+  blocos.push(alcance(p.cobertura));
 
   $("paineis").innerHTML = blocos.join("");
   const m2 = $("fMin");

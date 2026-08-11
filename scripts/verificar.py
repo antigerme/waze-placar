@@ -124,6 +124,20 @@ def _sem_interp(s):
 limpo_tpl = _sem_interp(sem_css)
 
 
+# Número por extenso envelhece igual: "as três janelas" quebra no dia em que a
+# API oferecer uma quarta, e nenhum dígito aparece para a checagem achar. Fora
+# da lista: "um"/"uma", que em português são artigo antes de serem número, e
+# sinalizariam em cada frase da página.
+EXTENSO = ("dois", "duas", "três", "tres", "quatro", "cinco", "seis", "sete",
+           "oito", "nove", "dez", "onze", "doze", "treze", "catorze",
+           "quatorze", "quinze", "dezesseis", "dezessete", "dezoito",
+           "dezenove", "vinte", "trinta", "quarenta", "cinquenta", "sessenta",
+           "setenta", "oitenta", "noventa", "cem", "cento", "duzentos",
+           "trezentos", "quinhentos", "mil")
+_RX_EXTENSO = re.compile(
+    r"(?<![0-9A-Za-zÀ-ÿ])(" + "|".join(EXTENSO) + r")(?![0-9A-Za-zÀ-ÿ])", re.I)
+
+
 def _numeros(txt):
     """Números escritos à mão num pedaço de texto da página.
 
@@ -131,7 +145,8 @@ def _numeros(txt):
     inteiro como "90 dias" passava batido, porque o número encostava na aspa
     de abertura. Era assim que os rótulos das abas escapavam.
     """
-    return re.findall(r'(?<![\w$.{#\-/])\b(\d{2,})\b', txt)
+    return (re.findall(r'(?<![\w$.{#\-/])\b(\d{2,})\b', txt)
+            + _RX_EXTENSO.findall(txt))
 
 
 alvos = []
