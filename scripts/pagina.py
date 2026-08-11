@@ -1440,7 +1440,12 @@ function alcance(c) {
     leram <b>${NF.format(c.linhasJanela)}</b> linhas e devolveram
     <b>${NF.format(c.ativosJanela)}</b> editores com alguma edição:
     ${c.semEdicaoPct}% das linhas são de quem não editou no período, porque o
-    ranking do Waze ordena por pontos, que somam dirigir e editar.` : ""}</p>
+    ranking do Waze ordena por pontos, que somam dirigir e editar.
+    Lendo depois o perfil de cada um do universo, o placar acha
+    <b>${NF.format(D.resumo.ativos30)}</b> com edição nos últimos
+    ${D.cfg.janelaMedia} dias e <b>${NF.format(D.resumo.ativos90)}</b> nos
+    últimos ${D.cfg.janela} — é a diferença entre o que o ranking mostra e o
+    que a coleta mede.` : ""}</p>
     <p style="color:var(--muted);font-size:.8rem;margin:8px 0 0">
     Por isso <b>o placar não é um censo</b>. Cada quadro do Waze corta em
     ${NF.format(D.cfg.cap)} linhas e não pagina, então quem edita muito e
