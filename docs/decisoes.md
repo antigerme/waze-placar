@@ -190,6 +190,16 @@ os estados que têm gente nela. Pedir "AC" na aba de 7 dias põe o `select` em
 "todos" sem reclamar, e a conferência passa a medir outra coisa — três falsos
 positivos aqui antes de eu perceber.
 
+**Deixar o número por extenso passar pela checagem de prosa.** A regra sempre
+disse que "as três janelas" envelhece igual a "3 janelas", mas o conferidor só
+procurava dígito. Escrevi "as duas janelas curtas" num painel novo e passou
+liso. Hoje ele também procura a palavra. Ficam de fora "um" e "uma", que em
+português são artigo antes de serem número e apitariam em cada frase.
+
+Varrendo o `pagina.py` inteiro, só três textos visíveis tinham o problema — as
+outras vinte e duas ocorrências eram comentário, que não envelhece na cara de
+ninguém. Os três viraram frase sem número.
+
 **Tratar busca e filtro de estado como a mesma coisa.** A coluna `#` vinha do
 índice do que sobrava na tela, depois dos dois controles. Sem filtro, índice e
 posição coincidem — e por isso passou por toda conferência, inclusive pelo

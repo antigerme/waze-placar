@@ -360,6 +360,10 @@ def universo(opener, quiet=False) -> Tuple[List[dict], List[str]]:
             ativos |= porperiodo.get(pp, set())
     faltando = ativos - historico
     estat = {
+        # O universo antes da coleta de perfis. A página compara com ele para
+        # dizer quantos entraram por caminho que não é ranking; subtrair do
+        # total de perfis daria errado, porque perfil que falhou some da conta.
+        "universo": len(juntos),
         "ativosJanela": len(ativos),
         "foraDoHistorico": len(faltando),
         "foraPct": round(100 * len(faltando) / len(ativos)) if ativos else 0,

@@ -109,6 +109,7 @@ os títulos que o `pagina.py` gera, para ela não descolar de novo:
 - Calendário de edições
 - Onde se edita agora
 - Cobertura de gerentes
+- Alcance da coleta
 <!-- paineis:fim -->
 
 Nem todos aparecem sempre: os que dependem de áreas ou de edições recentes
@@ -117,11 +118,21 @@ gerenciando área distante dos colegas de estado. Numa coleta `--sem-perfis` nã
 há vetor diário, então nenhum deles tem o que medir e a página diz isso em vez
 de mostrar painel zerado.
 
+O último painel, "Alcance da coleta", mede o próprio placar: de onde veio cada
+editor do universo e o que a fonte não entrega. Existe porque a pergunta mais
+comum de quem não se acha na lista é "por que eu não estou aqui?", e a resposta
+é medível — o ranking do Waze ordena por pontos, que somam dirigir e editar,
+corta num teto fixo e não pagina, então quem edita muito sem pontuar fica
+abaixo do corte em todos os quadros. O painel não estima quantos são: a fonte
+não consegue mostrar quem ela esconde. Mostra o que dá para medir, que é quanto
+os endpoints fora do ranking acrescentaram.
+
 **Todo texto da página é derivado dos dados.** Não há número escrito à mão em
 lugar nenhum que alguém leia — nem na prosa, nem nas dicas de hover, nem nos
-`title=` das colunas, nem nos rótulos das abas. Cada limiar é uma constante
-nomeada no topo do `pagina.py`, viaja no `cfg` e é interpolado no texto: um
-valor, um lugar.
+`title=` das colunas, nem nos rótulos das abas. Isso vale para número por
+extenso também: "as três janelas" envelhece igual a "3 janelas". Cada limiar é
+uma constante nomeada no topo do `pagina.py`, viaja no `cfg` e é interpolado no
+texto: um valor, um lugar.
 
 As afirmações ou descrevem o método ou são medidas na coleta, inclusive as que
 falam do formato do dado. A página não diz que o gradiente de atividade por

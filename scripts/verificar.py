@@ -124,6 +124,20 @@ def _sem_interp(s):
 limpo_tpl = _sem_interp(sem_css)
 
 
+# Número por extenso envelhece igual: "as três janelas" quebra no dia em que a
+# API oferecer uma quarta, e nenhum dígito aparece para a checagem achar. Fora
+# da lista: "um"/"uma", que em português são artigo antes de serem número, e
+# sinalizariam em cada frase da página.
+EXTENSO = ("dois", "duas", "três", "tres", "quatro", "cinco", "seis", "sete",
+           "oito", "nove", "dez", "onze", "doze", "treze", "catorze",
+           "quatorze", "quinze", "dezesseis", "dezessete", "dezoito",
+           "dezenove", "vinte", "trinta", "quarenta", "cinquenta", "sessenta",
+           "setenta", "oitenta", "noventa", "cem", "cento", "duzentos",
+           "trezentos", "quinhentos", "mil")
+_RX_EXTENSO = re.compile(
+    r"(?<![0-9A-Za-zÀ-ÿ])(" + "|".join(EXTENSO) + r")(?![0-9A-Za-zÀ-ÿ])", re.I)
+
+
 def _numeros(txt):
     """Números escritos à mão num pedaço de texto da página.
 
@@ -131,7 +145,8 @@ def _numeros(txt):
     inteiro como "90 dias" passava batido, porque o número encostava na aspa
     de abertura. Era assim que os rótulos das abas escapavam.
     """
-    return re.findall(r'(?<![\w$.{#\-/])\b(\d{2,})\b', txt)
+    return (re.findall(r'(?<![\w$.{#\-/])\b(\d{2,})\b', txt)
+            + _RX_EXTENSO.findall(txt))
 
 
 alvos = []
@@ -284,8 +299,13 @@ try:
         "firstEditDate": 1400000000000, "menteesCount": 0,
         "editsByType": {"segmentos": 10},
     }]
+    # `universo` entra porque sem ele o painel de alcance se omite, e a página
+    # seria montada sem passar por ele — o smoke test não veria uma quebra lá.
     _dados = _pag.prepara(_perfis, {"fulano": "BR-SP"}, "01/01/2000 00:00 UTC",
-                          estat={"foraPct": 1, "semEdicaoPct": 2})
+                          estat={"foraPct": 1, "semEdicaoPct": 2, "universo": 3,
+                                 "linhasJanela": 9, "ativosJanela": 2,
+                                 "novatosForaDoRanking": 1,
+                                 "candidatosForaDoRanking": 1})
     _html = _pag.build_html(_dados)
     if "__DATA__" in _html:
         erro("monta", "o marcador __DATA__ ficou na página")
