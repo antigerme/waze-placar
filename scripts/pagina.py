@@ -1434,9 +1434,12 @@ function alcance(c) {
     O universo tem <b>${NF.format(c.universo)}</b> editores${
       c.perfis && c.perfis !== c.universo
         ? `, dos quais <b>${NF.format(c.perfis)}</b> tiveram o perfil lido` : ""}.
-    <b>${NF.format(foraDoRanking)}</b> deles — ${pctFora}% — não apareciam em
-    ranking nenhum e entraram pela lista de novatos ou pela de candidatos a
-    subir de nível.${c.linhasJanela ? ` As varreduras das janelas curtas
+    ${foraDoRanking
+      ? `<b>${NF.format(foraDoRanking)}</b> deles — ${pctFora}% — não apareciam
+         em ranking nenhum e entraram pela lista de novatos ou pela de
+         candidatos a subir de nível.`
+      : "Nesta coleta todos apareciam em algum ranking; as listas de novatos e de candidatos não trouxeram ninguém novo."}${
+      c.linhasJanela ? ` As varreduras das janelas curtas
     leram <b>${NF.format(c.linhasJanela)}</b> linhas e devolveram
     <b>${NF.format(c.ativosJanela)}</b> editores com alguma edição:
     ${c.semEdicaoPct}% das linhas são de quem não editou no período, porque o

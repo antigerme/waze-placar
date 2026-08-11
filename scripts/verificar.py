@@ -299,8 +299,13 @@ try:
         "firstEditDate": 1400000000000, "menteesCount": 0,
         "editsByType": {"segmentos": 10},
     }]
+    # `universo` entra porque sem ele o painel de alcance se omite, e a página
+    # seria montada sem passar por ele — o smoke test não veria uma quebra lá.
     _dados = _pag.prepara(_perfis, {"fulano": "BR-SP"}, "01/01/2000 00:00 UTC",
-                          estat={"foraPct": 1, "semEdicaoPct": 2})
+                          estat={"foraPct": 1, "semEdicaoPct": 2, "universo": 3,
+                                 "linhasJanela": 9, "ativosJanela": 2,
+                                 "novatosForaDoRanking": 1,
+                                 "candidatosForaDoRanking": 1})
     _html = _pag.build_html(_dados)
     if "__DATA__" in _html:
         erro("monta", "o marcador __DATA__ ficou na página")

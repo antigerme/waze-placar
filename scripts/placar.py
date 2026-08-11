@@ -126,6 +126,11 @@ def main() -> None:
             "assim.".format(len(falhas), ", ".join(falhas)))
     if args.limit:
         editores = editores[:args.limit]
+        # O painel de alcance compara o universo com o que entrou na página.
+        # Com uma amostra ele descreveria uma coleta que não aconteceu — as
+        # barras somariam milhares numa página de vinte linhas. Sem o campo,
+        # o painel se omite.
+        estat.pop("universo", None)
 
     ufs = {e["username"]: e["uf"] for e in editores}
 
