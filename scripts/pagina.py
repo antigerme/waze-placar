@@ -1380,12 +1380,15 @@ function cidadesEtipos(a) {
 
 function mapa(m) {
   if (!m.celulas.length) return "";
-  const FAIXAS = [[5, 1, "5 ou mais"], [3, .72, "3 a 4"],
-                  [2, .48, "2"], [1, .26, "1"]];
-  const cor = (n) => (FAIXAS.find((f) => n >= f[0]) || FAIXAS[3])[1];
+  // O topo da escala é o máximo de gerentes numa célula NESTA coleta — dinâmico,
+  // não um balde fixo. O antigo "5+" achatava tudo de 5 ao máximo num tom só, e
+  // mais da metade das células caía ali. Curva de raiz porque a distribuição
+  // concentra no meio: linear jogaria a mediana no quase-invisível.
+  const max = m.celulas.reduce((a, c) => Math.max(a, c[2]), 1);
+  const op = (n) => max <= 1 ? 1 : 0.12 + 0.88 * Math.sqrt((n - 1) / (max - 1));
   const cells = m.celulas.map(([i, j, n]) =>
     `<rect x="${i}" y="${m.ny - 1 - j}" width="1" height="1"
-       fill="var(--series)" fill-opacity="${cor(n)}"><title>${n} editor(es)</title></rect>`
+       fill="var(--series)" fill-opacity="${op(n).toFixed(3)}"><title>${n} gerente(s)</title></rect>`
   ).join("");
   // Retículas a cada 10° dão referência sem inventar geografia.
   let grade = "";
@@ -1395,10 +1398,18 @@ function mapa(m) {
   for (let g = 10; g < m.ny; g += 20)
     grade += `<line x1="0" y1="${g}" x2="${m.nx}" y2="${g}"
       stroke="var(--grid)" stroke-width=".35"/>`;
-  const legenda = FAIXAS.slice().reverse().map(([n, o, rot]) =>
-    `<span style="display:inline-flex;align-items:center;gap:5px;margin-right:12px">
-       <span style="width:12px;height:12px;border-radius:3px;background:var(--series);
-                    opacity:${o};display:inline-block"></span>${rot}</span>`).join("");
+  // Legenda contínua: a mesma cor e a mesma curva das células, amostradas em
+  // stops, com os extremos rotulados — um (mais claro) e o máximo medido.
+  const stops = [0, .2, .4, .6, .8, 1].map((t) =>
+    `<stop offset="${t}" stop-color="var(--series)"
+       stop-opacity="${op(1 + t * (max - 1)).toFixed(3)}"/>`).join("");
+  const legenda = `<span style="display:inline-flex;align-items:center;gap:8px">
+      <span style="color:var(--muted)">1</span>
+      <svg width="180" height="12" style="display:block" aria-hidden="true">
+        <defs><linearGradient id="cbar">${stops}</linearGradient></defs>
+        <rect width="180" height="12" rx="3" fill="url(#cbar)"/>
+      </svg>
+      <span style="color:var(--muted)">${NF.format(max)} gerentes</span></span>`;
 
   return `<div class="painel" style="grid-column:1/-1">
     <h2>Cobertura de gerentes</h2>
@@ -1411,10 +1422,10 @@ function mapa(m) {
     <p style="color:var(--muted);font-size:.8rem;margin:8px 0 0">
       ${NF.format(m.editores)} dos editores ativos gerenciam
       ${NF.format(m.areas)} áreas. Cada quadrado tem ${String(D.cfg.celulaGrau).replace(".", ",")}° de lado
-      (~${D.cfg.celulaKm} km) e a cor
-      diz quantos editores distintos o cobrem; onde não há quadrado, nenhum
-      editor ativo gerencia. Projeção simples por latitude e longitude, sem
-      contorno político — é um esboço de cobertura, não um mapa.
+      (~${D.cfg.celulaKm} km) e a cor vai do mais claro (um gerente) ao mais
+      escuro (${NF.format(max)}, o máximo nesta coleta); onde não há quadrado,
+      nenhum editor ativo gerencia. Projeção simples por latitude e longitude,
+      sem contorno político — é um esboço de cobertura, não um mapa.
       ${m.fora ? NF.format(m.fora) + " editores gerenciam áreas fora do Brasil, não desenhadas." : ""}
     </p></div>`;
 }
