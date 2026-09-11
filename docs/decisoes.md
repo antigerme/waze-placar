@@ -13,6 +13,18 @@ caminho que já foi andado.
 Cada um destes custou uma conclusão errada antes de virar linha de código.
 Estão aqui porque são fáceis de repetir.
 
+**Cortar o painel de estados nas 14 UFs de maior volume.** A tabela mostrava
+só as primeiras por edições, com um `.slice(0, 14)` herdado da tabela
+principal — onde o corte existe por desempenho, com milhares de linhas. Aqui o
+teto é 27 UFs, então o corte não poupava nada e escondia justamente o que o
+painel mede: os estados frágeis, de fator 1, são os de baixo volume que iam
+para o fim da lista. O KPI do topo dizia "19 estados dependem de um único
+editor" e a tabela deixava ver 7 deles; os 12 mais extremos — inclusive UFs com
+um único editor ativo respondendo por 100% — ficavam abaixo do corte. O número
+que o painel existe para dar não fechava com o que ele mostrava. Hoje lista
+todas as UFs com atividade, e a legenda conta quantas são das 27 — o silêncio
+de uma UF sem ninguém ativo virou informação em vez de linha ausente.
+
 **Concluir que o `lookbackPeriod` era inerte.** Foi sondado com valores
 inventados (`LAST_7_DAYS` e afins), o servidor respondeu 200 com o payload de
 `ALL_TIME`, e a leitura foi "o parâmetro não funciona". Funciona; só existem

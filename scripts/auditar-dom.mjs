@@ -256,8 +256,8 @@ for (const largura of [390, 768, 1400]) {
     // estados
     const pe = pain('Estados');
     if (pe) { const trs = [...pe.querySelectorAll('tbody tr')];
-      out.n++; if (trs.length !== Math.min(14, P.estados.length))
-        out.probs.push('estados: ' + trs.length + ' linhas, esperado ' + Math.min(14, P.estados.length));
+      out.n++; if (trs.length !== P.estados.length)
+        out.probs.push('estados: ' + trs.length + ' linhas, esperado ' + P.estados.length);
       trs.forEach((tr, i) => { const td = tr.querySelectorAll('td'); const r = P.estados[i]; out.n += 3;
         if (td[0].textContent.trim() !== r[0]) out.probs.push('estado ' + i + ': UF ' + td[0].textContent.trim());
         if (td[1].textContent.trim() !== NFtxt(r[1])) out.probs.push('estado ' + r[0] + ': edições');

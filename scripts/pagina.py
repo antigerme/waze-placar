@@ -1483,7 +1483,7 @@ function paineis() {
     <th class="num" title="Fator de ônibus: quantos editores precisariam parar para o estado perder metade das edições. Fator 1 é o pior caso — uma só pessoa segura mais da metade.">Fator</th>
     <th title="Quem mais produziu no estado, e a fatia do total que veio dessa pessoa.">Maior editor</th>
     </tr></thead><tbody>
-    ${p.estados.slice(0, 14).map(([uf, ed, n, fator, topo, pct]) => `<tr>
+    ${p.estados.map(([uf, ed, n, fator, topo, pct]) => `<tr>
        <td><span class="chip">${uf}</span></td>
        <td class="num" title="${NF.format(ed)} edições em ${D.cfg.janela} dias, de ${n} editor(es) ativo(s)">${NF.format(ed)}</td>
        <td class="num c-ativos">${n}</td>
@@ -1498,7 +1498,9 @@ function paineis() {
     <b>Fator</b> é quantos editores precisariam parar para o estado perder
     metade das edições. Fator 1 significa que um único editor responde por
     mais da metade — ${NF.format(D.resumo.fator1)} estados estão nessa
-    situação.</p></div>`);
+    situação. ${p.estados.length < D.cfg.ufs
+      ? "A tabela traz as " + p.estados.length + " de " + D.cfg.ufs + " UFs; nas demais ninguém editou na janela."
+      : "Todas as " + D.cfg.ufs + " UFs tiveram edição na janela."}</p></div>`);
 
   blocos.push(`<div class="painel"><h2>Concentração</h2>
     ${barras(p.concentracao.map(([n, pc]) => ["top " + n, pc]), (v) => NF.format(v) + "%",
