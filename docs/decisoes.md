@@ -257,6 +257,26 @@ mais abaixo.
 
 ## Caminhos testados e descartados
 
+**Escala dos mapas: gradiente contínuo em vez de baldes fixos.** Os dois mapas
+de grade — cobertura de gerentes e onde se edita — usavam quatro baldes com
+teto ("5+", "8+"). Medido: os gerentes por célula vão de 1 a 35 (mediana 5) e as
+edições de 1 a 66 (mediana 2), então o balde de topo engolia mais da metade das
+células num tom só. Hoje a escala é contínua, com o topo ancorado no máximo
+daquela coleta — dinâmico — e curva de raiz, porque as duas distribuições
+concentram no meio e o linear apagaria a mediana.
+
+**Paleta dos mapas: arco-íris térmico (jet), escolhido com ressalva.** O padrão
+seguro para magnitude é uma cor só, claro→escuro; o arco-íris (azul→verde→
+amarelo→vermelho) é anti-padrão conhecido — cria faixas aparentes nas trocas de
+matiz que não existem no dado, é o pior caso para daltônicos, e o vermelho
+colide com o significado de sanção que a página usa em "fator 1". Foram
+renderizados quatro mockups (azul por opacidade, azul aprofundado, quente de
+matiz único, jet) e a escolha foi o jet, ciente disso. Um ganho real
+compensou em parte: por usar cor sólida e não opacidade, o mapa lê igual no
+tema claro e no escuro — a versão por opacidade serrilhava as bordas sobre
+fundo escuro. Se um dia a legibilidade por daltônico pesar mais que a estética,
+o caminho de volta é o azul aprofundado, também já medido e pronto no histórico.
+
 **Snapshot e diff de `ALL_TIME`.** Funcionava e resolvia qualquer janela, não
 só as três da API. Removido quando o escopo passou a ser "sem armazenamento".
 Continua sendo a melhor saída se um dia houver onde guardar — o código está no
