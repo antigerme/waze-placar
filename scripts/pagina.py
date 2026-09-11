@@ -304,6 +304,12 @@ def prepara(perfis, ufs, gerado, areas=None, estat=None, extras=None,
         estados.append([uf, tot, len(gente), fator, gente[0]["u"],
                         round(100 * gente[0]["d90"] / tot) if tot else 0])
     estados.sort(key=lambda r: -r[1])
+    # UFs sem nenhuma edição na janela: têm gente no universo, mas todos
+    # parados. Antes sumiam da tabela; agora entram como linha própria, para
+    # o fator de ônibus no extremo — ninguém editando — não virar ausência
+    # silenciosa. A lista canônica vem do waze.UFS, então uma UF sem ninguém
+    # no universo também aparece.
+    estados_inativos = sorted(set(waze.UFS) - {r[0] for r in estados})
 
     # Vigília: produzia no começo da janela e emudeceu no fim.
     evasao = sorted(
@@ -655,6 +661,7 @@ def prepara(perfis, ufs, gerado, areas=None, estat=None, extras=None,
             "entrada": entrada,
             "parados": parados,
             "estados": estados,
+            "estadosInativos": estados_inativos,
             "evasao": evasao,
             "retornos": retornos,
             "niveis": niveis,
@@ -1493,14 +1500,18 @@ function paineis() {
        <td class="quebra">${link(topo)}
          <span style="color:var(--muted)">${pct}%</span></td>
       </tr>`).join("")}
+    ${p.estadosInativos.map((uf) => `<tr>
+       <td><span class="chip">${uf}</span></td>
+       <td colspan="4" style="color:var(--muted)">sem atividade na janela</td>
+      </tr>`).join("")}
     </tbody></table>
     <p style="color:var(--muted);font-size:.8rem;margin:10px 0 0">
     <b>Fator</b> é quantos editores precisariam parar para o estado perder
     metade das edições. Fator 1 significa que um único editor responde por
     mais da metade — ${NF.format(D.resumo.fator1)} estados estão nessa
-    situação. ${p.estados.length < D.cfg.ufs
-      ? "A tabela traz as " + p.estados.length + " de " + D.cfg.ufs + " UFs; nas demais ninguém editou na janela."
-      : "Todas as " + D.cfg.ufs + " UFs tiveram edição na janela."}</p></div>`);
+    situação.${p.estadosInativos.length
+      ? " As UFs ao final não registraram nenhuma edição na janela."
+      : ""}</p></div>`);
 
   blocos.push(`<div class="painel"><h2>Concentração</h2>
     ${barras(p.concentracao.map(([n, pc]) => ["top " + n, pc]), (v) => NF.format(v) + "%",

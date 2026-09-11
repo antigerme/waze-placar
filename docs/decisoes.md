@@ -22,8 +22,9 @@ para o fim da lista. O KPI do topo dizia "19 estados dependem de um único
 editor" e a tabela deixava ver 7 deles; os 12 mais extremos — inclusive UFs com
 um único editor ativo respondendo por 100% — ficavam abaixo do corte. O número
 que o painel existe para dar não fechava com o que ele mostrava. Hoje lista
-todas as UFs com atividade, e a legenda conta quantas são das 27 — o silêncio
-de uma UF sem ninguém ativo virou informação em vez de linha ausente.
+todas as UFs com atividade e, ao final, as que não tiveram nenhuma edição na
+janela como linha própria ("AP — sem atividade na janela") — o fator de ônibus
+no extremo, ninguém editando, virou linha visível em vez de ausência silenciosa.
 
 **Concluir que o `lookbackPeriod` era inerte.** Foi sondado com valores
 inventados (`LAST_7_DAYS` e afins), o servidor respondeu 200 com o payload de
