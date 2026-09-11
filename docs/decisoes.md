@@ -277,29 +277,6 @@ tema claro e no escuro — a versão por opacidade serrilhava as bordas sobre
 fundo escuro. Se um dia a legibilidade por daltônico pesar mais que a estética,
 o caminho de volta é o azul aprofundado, também já medido e pronto no histórico.
 
-**Fundo dos mapas: azulejos do livemap do Waze, descartados por contorno
-estático.** Os dois mapas de grade não tinham nenhuma referência geográfica —
-célula solta no vazio, difícil saber onde no país. A primeira ideia foi puxar os
-azulejos do livemap por baixo. Três motivos derrubaram: o livemap é Web
-Mercator e a grade da página é equirretangular (latitude e longitude direto em
-x e y), então os azulejos entrariam tortos em relação às células, cada vez mais
-para o sul; buscar azulejo é requisição para fora, e "a página não fala com
-ninguém" é invariante conferido; e raster pesado brigaria com o desenho por
-cima. Ficou um contorno das UFs, estático e no sistema de coordenadas da própria
-grade — casa com as células por construção, sem projeção intermediária. A
-geometria crua do IBGE tem milhares de vértices (o mesmo motivo pelo qual a
-cobertura vira grade, não polígono — ver `_dentro`); simplificada por distância
-mínima até caber, tolerância 0,7 dá ~19 KB, e o traço a olho nu não perde nada
-dela. Vai no `cfg`, uma origem só para os dois mapas lerem.
-
-A demão muda entre os dois, de propósito. No de atividade as células são poucas
-e esparsas: o contorno vai **por baixo**, em `--baseline`, só para orientar sem
-disputar com o punhado de células quentes. No de cobertura as células preenchem
-quase o país inteiro e enterrariam um traço embaixo: ali o contorno vai **por
-cima**, branco translúcido, aparecendo sobre o preenchimento. Em coleta rala de
-teste o branco some nas regiões vazias do tema claro; com a cobertura real, que
-cobre quase tudo, ele lê — foi assim que o mockup foi aprovado.
-
 **Snapshot e diff de `ALL_TIME`.** Funcionava e resolvia qualquer janela, não
 só as três da API. Removido quando o escopo passou a ser "sem armazenamento".
 Continua sendo a melhor saída se um dia houver onde guardar — o código está no
