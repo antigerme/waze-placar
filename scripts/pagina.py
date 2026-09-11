@@ -304,6 +304,12 @@ def prepara(perfis, ufs, gerado, areas=None, estat=None, extras=None,
         estados.append([uf, tot, len(gente), fator, gente[0]["u"],
                         round(100 * gente[0]["d90"] / tot) if tot else 0])
     estados.sort(key=lambda r: -r[1])
+    # UFs sem nenhuma edição na janela: têm gente no universo, mas todos
+    # parados. Antes sumiam da tabela; agora entram como linha própria, para
+    # o fator de ônibus no extremo — ninguém editando — não virar ausência
+    # silenciosa. A lista canônica vem do waze.UFS, então uma UF sem ninguém
+    # no universo também aparece.
+    estados_inativos = sorted(set(waze.UFS) - {r[0] for r in estados})
 
     # Vigília: produzia no começo da janela e emudeceu no fim.
     evasao = sorted(
@@ -655,6 +661,7 @@ def prepara(perfis, ufs, gerado, areas=None, estat=None, extras=None,
             "entrada": entrada,
             "parados": parados,
             "estados": estados,
+            "estadosInativos": estados_inativos,
             "evasao": evasao,
             "retornos": retornos,
             "niveis": niveis,
@@ -1303,30 +1310,52 @@ function calendario(p) {
 
 // Mesma projeção e mesmo passo do mapa de cobertura, de propósito: um diz onde
 // alguém tem responsabilidade formal, o outro onde a mão encostou de verdade.
+// --- rampa de calor, compartilhada pelos dois mapas -----------------------
+// Arco-íris térmico: baixo=azul, alto=vermelho. Escolha deliberada; a ressalva
+// de legibilidade (faixas aparentes nas trocas de matiz, leitura difícil para
+// daltônicos) está no docs/decisoes.md. Uma origem só, para os dois mapas — o
+// de cobertura e o de atividade — lerem na mesma cor.
+const CALOR = ["#2c7bb6", "#00b3b3", "#7fbc41", "#fee08b", "#f46d43", "#d7191c"];
+function corCalor(t) {
+  t = Math.max(0, Math.min(1, t));
+  const s = CALOR.length - 1, k = Math.min(Math.floor(t * s), s - 1), f = t * s - k;
+  const h = (c) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
+  const a = h(CALOR[k]), b = h(CALOR[k + 1]);
+  return "#" + [0, 1, 2].map((i) =>
+    Math.round(a[i] + (b[i] - a[i]) * f).toString(16).padStart(2, "0")).join("");
+}
+// Grade + células na rampa, e a barra-legenda. Curva de raiz porque as duas
+// distribuições concentram no meio (mediana bem abaixo do máximo); o topo da
+// escala é o máximo medido nesta coleta, dinâmico.
+function raster(cel, nx, ny, un) {
+  const max = cel.reduce((a, c) => Math.max(a, c[2]), 1);
+  const t = (n) => max <= 1 ? 1 : Math.sqrt((n - 1) / (max - 1));
+  let grade = "";
+  for (let g = 10; g < nx; g += 20)
+    grade += `<line x1="${g}" y1="0" x2="${g}" y2="${ny}" stroke="var(--grid)" stroke-width=".35"/>`;
+  for (let g = 10; g < ny; g += 20)
+    grade += `<line x1="0" y1="${g}" x2="${nx}" y2="${g}" stroke="var(--grid)" stroke-width=".35"/>`;
+  const cells = cel.map(([i, j, n]) =>
+    `<rect x="${i}" y="${ny - 1 - j}" width="1" height="1" fill="${corCalor(t(n))}"><title>${n} ${un}</title></rect>`).join("");
+  // barra-legenda como gradiente CSS: amostra a mesma rampa em stops percentuais
+  const grad = [0, .2, .4, .6, .8, 1]
+    .map((v) => corCalor(v) + " " + Math.round(v * 100) + "%").join(", ");
+  const legenda = `<span style="display:inline-flex;align-items:center;gap:8px">
+      <span style="color:var(--muted)">1</span>
+      <span style="width:180px;height:12px;border-radius:3px;display:inline-block;
+                   background:linear-gradient(90deg, ${grad})"></span>
+      <span style="color:var(--muted)">${NF.format(max)} ${un}</span></span>`;
+  return { max, grade, cells, legenda };
+}
+
 function mapaAtividade(a) {
   if (!a.celulas.length) return "";
-  const FAIXAS = [[8, 1, "8 ou mais"], [4, .74, "4 a 7"],
-                  [2, .5, "2 a 3"], [1, .28, "1"]];
-  const cor = (n) => (FAIXAS.find((f) => n >= f[0]) || FAIXAS[3])[1];
-  const cells = a.celulas.map(([i, j, n]) =>
-    `<rect x="${i}" y="${a.ny - 1 - j}" width="1" height="1"
-       fill="var(--series)" fill-opacity="${cor(n)}"><title>${n} edição(ões)</title></rect>`
-  ).join("");
-  let grade = "";
-  for (let g = 10; g < a.nx; g += 20)
-    grade += `<line x1="${g}" y1="0" x2="${g}" y2="${a.ny}" stroke="var(--grid)" stroke-width=".35"/>`;
-  for (let g = 10; g < a.ny; g += 20)
-    grade += `<line x1="0" y1="${g}" x2="${a.nx}" y2="${g}" stroke="var(--grid)" stroke-width=".35"/>`;
-  const legenda = FAIXAS.slice().reverse().map(([n, o, rot]) =>
-    `<span style="display:inline-flex;align-items:center;gap:5px;margin-right:12px">
-       <span style="width:12px;height:12px;border-radius:3px;background:var(--series);
-                    opacity:${o};display:inline-block"></span>${rot}</span>`).join("");
-
+  const r = raster(a.celulas, a.nx, a.ny, "edições");
   return `<div class="painel" style="grid-column:1/-1"><h2>Onde se edita agora</h2>
     <svg viewBox="0 0 ${a.nx} ${a.ny}" style="width:100%;max-width:520px;height:auto;
          display:block;margin:0 auto" shape-rendering="crispEdges" role="img"
-         aria-label="Mapa das edições mais recentes no Brasil">${grade}${cells}</svg>
-    <p style="margin:12px 0 0;font-size:.8rem;color:var(--muted)">${legenda}</p>
+         aria-label="Mapa das edições mais recentes no Brasil">${r.grade}${r.cells}</svg>
+    <p style="margin:12px 0 0;font-size:.8rem;color:var(--muted)">${r.legenda}</p>
     <p style="color:var(--muted);font-size:.8rem;margin:8px 0 0">
       As <b>${NF.format(a.edicoes)}</b> edições mais recentes de
       ${NF.format(a.editores)} editores — a API devolve as
@@ -1334,8 +1363,9 @@ function mapaAtividade(a) {
       últimos ${D.cfg.janela} dias.${a.descartadas
         ? ` Outras ${NF.format(a.descartadas)} eram mais antigas que isso e
             saíram da conta.` : ""}
-      Mesma grade do mapa de cobertura, para comparar: lá é onde há gerente,
-      aqui é onde a mão encostou.
+      A cor vai do azul (uma edição) ao vermelho (${NF.format(r.max)}, o máximo
+      numa célula). Mesma grade do mapa de cobertura, para comparar: lá é onde
+      há gerente, aqui é onde a mão encostou.
       ${a.fora ? NF.format(a.fora) + " ficaram fora do recorte do Brasil." : ""}
     </p></div>`;
 }
@@ -1373,41 +1403,22 @@ function cidadesEtipos(a) {
 
 function mapa(m) {
   if (!m.celulas.length) return "";
-  const FAIXAS = [[5, 1, "5 ou mais"], [3, .72, "3 a 4"],
-                  [2, .48, "2"], [1, .26, "1"]];
-  const cor = (n) => (FAIXAS.find((f) => n >= f[0]) || FAIXAS[3])[1];
-  const cells = m.celulas.map(([i, j, n]) =>
-    `<rect x="${i}" y="${m.ny - 1 - j}" width="1" height="1"
-       fill="var(--series)" fill-opacity="${cor(n)}"><title>${n} editor(es)</title></rect>`
-  ).join("");
-  // Retículas a cada 10° dão referência sem inventar geografia.
-  let grade = "";
-  for (let g = 10; g < m.nx; g += 20)
-    grade += `<line x1="${g}" y1="0" x2="${g}" y2="${m.ny}"
-      stroke="var(--grid)" stroke-width=".35"/>`;
-  for (let g = 10; g < m.ny; g += 20)
-    grade += `<line x1="0" y1="${g}" x2="${m.nx}" y2="${g}"
-      stroke="var(--grid)" stroke-width=".35"/>`;
-  const legenda = FAIXAS.slice().reverse().map(([n, o, rot]) =>
-    `<span style="display:inline-flex;align-items:center;gap:5px;margin-right:12px">
-       <span style="width:12px;height:12px;border-radius:3px;background:var(--series);
-                    opacity:${o};display:inline-block"></span>${rot}</span>`).join("");
-
+  const r = raster(m.celulas, m.nx, m.ny, "gerentes");
   return `<div class="painel" style="grid-column:1/-1">
     <h2>Cobertura de gerentes</h2>
     <svg viewBox="0 0 ${m.nx} ${m.ny}" style="width:100%;max-width:520px;
          height:auto;display:block;margin:0 auto" shape-rendering="crispEdges"
          role="img" aria-label="Mapa de cobertura de gerentes de área no Brasil">
-      ${grade}${cells}
+      ${r.grade}${r.cells}
     </svg>
-    <p style="margin:12px 0 0;font-size:.8rem;color:var(--muted)">${legenda}</p>
+    <p style="margin:12px 0 0;font-size:.8rem;color:var(--muted)">${r.legenda}</p>
     <p style="color:var(--muted);font-size:.8rem;margin:8px 0 0">
       ${NF.format(m.editores)} dos editores ativos gerenciam
       ${NF.format(m.areas)} áreas. Cada quadrado tem ${String(D.cfg.celulaGrau).replace(".", ",")}° de lado
-      (~${D.cfg.celulaKm} km) e a cor
-      diz quantos editores distintos o cobrem; onde não há quadrado, nenhum
-      editor ativo gerencia. Projeção simples por latitude e longitude, sem
-      contorno político — é um esboço de cobertura, não um mapa.
+      (~${D.cfg.celulaKm} km) e a cor vai do azul (um gerente) ao vermelho
+      (${NF.format(r.max)}, o máximo nesta coleta); onde não há quadrado,
+      nenhum editor ativo gerencia. Projeção simples por latitude e longitude,
+      sem contorno político — é um esboço de cobertura, não um mapa.
       ${m.fora ? NF.format(m.fora) + " editores gerenciam áreas fora do Brasil, não desenhadas." : ""}
     </p></div>`;
 }
@@ -1493,14 +1504,18 @@ function paineis() {
        <td class="quebra">${link(topo)}
          <span style="color:var(--muted)">${pct}%</span></td>
       </tr>`).join("")}
+    ${p.estadosInativos.map((uf) => `<tr>
+       <td><span class="chip">${uf}</span></td>
+       <td colspan="4" style="color:var(--muted)">sem atividade na janela</td>
+      </tr>`).join("")}
     </tbody></table>
     <p style="color:var(--muted);font-size:.8rem;margin:10px 0 0">
     <b>Fator</b> é quantos editores precisariam parar para o estado perder
     metade das edições. Fator 1 significa que um único editor responde por
     mais da metade — ${NF.format(D.resumo.fator1)} estados estão nessa
-    situação. ${p.estados.length < D.cfg.ufs
-      ? "A tabela traz as " + p.estados.length + " de " + D.cfg.ufs + " UFs; nas demais ninguém editou na janela."
-      : "Todas as " + D.cfg.ufs + " UFs tiveram edição na janela."}</p></div>`);
+    situação.${p.estadosInativos.length
+      ? " As UFs ao final não registraram nenhuma edição na janela."
+      : ""}</p></div>`);
 
   blocos.push(`<div class="painel"><h2>Concentração</h2>
     ${barras(p.concentracao.map(([n, pc]) => ["top " + n, pc]), (v) => NF.format(v) + "%",

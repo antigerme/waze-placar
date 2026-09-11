@@ -253,16 +253,21 @@ for (const largura of [390, 768, 1400]) {
       if (sa[i].rot !== String(ano)) out.probs.push('safra rótulo ' + sa[i].rot);
       if (!sa[i].val.startsWith(String(n))) out.probs.push('safra ' + ano + ': "' + sa[i].val + '" != ' + n); }); }
 
-    // estados
+    // estados — ativos, e depois as UFs sem atividade na janela
     const pe = pain('Estados');
     if (pe) { const trs = [...pe.querySelectorAll('tbody tr')];
-      out.n++; if (trs.length !== P.estados.length)
-        out.probs.push('estados: ' + trs.length + ' linhas, esperado ' + P.estados.length);
-      trs.forEach((tr, i) => { const td = tr.querySelectorAll('td'); const r = P.estados[i]; out.n += 3;
+      const inat = P.estadosInativos || [];
+      out.n++; if (trs.length !== P.estados.length + inat.length)
+        out.probs.push('estados: ' + trs.length + ' linhas, esperado ' + (P.estados.length + inat.length));
+      P.estados.forEach((r, i) => { const tr = trs[i]; if (!tr) return;
+        const td = tr.querySelectorAll('td'); out.n += 3;
         if (td[0].textContent.trim() !== r[0]) out.probs.push('estado ' + i + ': UF ' + td[0].textContent.trim());
         if (td[1].textContent.trim() !== NFtxt(r[1])) out.probs.push('estado ' + r[0] + ': edições');
         const f = [...td].slice(-2)[0];
-        if (f && f.textContent.trim() !== String(r[3])) out.probs.push('estado ' + r[0] + ': fator'); }); }
+        if (f && f.textContent.trim() !== String(r[3])) out.probs.push('estado ' + r[0] + ': fator'); });
+      inat.forEach((uf, j) => { const tr = trs[P.estados.length + j]; out.n += 2;
+        if (!tr || tr.children[0].textContent.trim() !== uf) out.probs.push('UF inativa ' + uf + ' fora de lugar');
+        else if (!tr.textContent.toLowerCase().includes('sem atividade')) out.probs.push('UF inativa ' + uf + ' sem rótulo'); }); }
 
     // gigantes parados
     const pp = pain('Gigantes');
