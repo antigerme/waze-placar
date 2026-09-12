@@ -277,6 +277,30 @@ tema claro e no escuro — a versão por opacidade serrilhava as bordas sobre
 fundo escuro. Se um dia a legibilidade por daltônico pesar mais que a estética,
 o caminho de volta é o azul aprofundado, também já medido e pronto no histórico.
 
+**Contorno das UFs no mapa de cobertura, e a cor que ele tem que ter.** As
+células ficavam soltas no vazio, sem referência de onde no país caem. Entrou um
+contorno das UFs, estático e simplificado do polígono do IBGE, no sistema de
+coordenadas da própria grade — casa com as células por construção, sem projeção
+intermediária. Vai por cima das células, não por baixo: a cobertura preenche
+quase o país inteiro e enterraria um traço embaixo.
+
+A cor foi o que deu trabalho. **Branco puro não serve**: lê muito bem no tema
+escuro, e no claro some — sobre o fundo da página nas regiões sem célula, e
+sobre as células amarelas da parte de cima da rampa. Foi assim que a primeira
+versão foi parar no ar e voltar. Duas saídas foram desenhadas e descartadas: o
+**halo** (traço escuro largo por baixo, branco fino por cima) resolve em
+qualquer fundo, mas engrossa a ponto de competir com o dado, e no tema escuro
+deixa uma borda suja em volta das áreas vazias; o **cinza médio único** nos dois
+temas é o mais simples, e nunca tem contraste máximo em nenhum dos dois. Ficou a
+cor por tema, na variável `--contorno` — escura no claro, branca no escuro —,
+que é como o resto da página já resolve `--grid` e `--baseline`.
+
+Antes disso tudo cogitou-se puxar os **azulejos do livemap do Waze** por baixo.
+Três motivos derrubaram: o livemap é Web Mercator e a grade é equirretangular,
+então os azulejos entrariam tortos em relação às células, cada vez mais para o
+sul; buscar azulejo é requisição para fora, e "a página não fala com ninguém" é
+invariante conferido; e raster pesado brigaria com o desenho por cima.
+
 **Snapshot e diff de `ALL_TIME`.** Funcionava e resolvia qualquer janela, não
 só as três da API. Removido quando o escopo passou a ser "sem armazenamento".
 Continua sendo a melhor saída se um dia houver onde guardar — o código está no
