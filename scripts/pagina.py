@@ -710,29 +710,29 @@ PAGE = r"""<!doctype html>
 <style>
   :root {
     color-scheme: light;
-    --page:#f6f8fa; --card:#fff; --ink:#12212e; --muted:#5b6b7a;
-    --line:#e3e9ef; --chip:#eef3f7;
-    --series:#2a78d6; --series-soft:#cde2fb; --tab-ativa:#1a62b8;
+    --page:#eceee5; --card:#f7f8f2; --ink:#222a24; --muted:#566055;
+    --line:#cdd3c4; --chip:#e2e6d8;
+    --series:#3d6b5c; --series-soft:#c7d6cf; --tab-ativa:#2f4f45;
     --grid:#e1e0d9; --baseline:#c3c2b7; --axis:#898781; --contorno:#4f4e46;
-    --up:#006300; --down:#d03b3b;
+    --up:#2e6b3a; --down:#a33a2a;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
       color-scheme: dark;
-      --page:#0d1519; --card:#141f26; --ink:#e6eef4; --muted:#8ba3b4;
-      --line:#22323d; --chip:#1b2a33;
-      --series:#3987e5; --series-soft:#1b3f55; --tab-ativa:#2a6fc4; --tab-ativa:#2a6fc4;
+      --page:#111510; --card:#171c16; --ink:#e3e8dc; --muted:#9aa695;
+      --line:#2a3228; --chip:#1f251d;
+      --series:#8fbfa8; --series-soft:#25392f; --tab-ativa:#3d6b5c;
       --grid:#2c2c2a; --baseline:#383835; --axis:#898781; --contorno:#ffffff;
-      --up:#0ca30c; --down:#e86b66;
+      --up:#7fd18c; --down:#e88a7a;
     }
   }
   :root[data-theme="dark"] {
     color-scheme: dark;
-    --page:#0d1519; --card:#141f26; --ink:#e6eef4; --muted:#8ba3b4;
-    --line:#22323d; --chip:#1b2a33;
-    --series:#3987e5; --series-soft:#1b3f55; --tab-ativa:#2a6fc4;
+    --page:#111510; --card:#171c16; --ink:#e3e8dc; --muted:#9aa695;
+    --line:#2a3228; --chip:#1f251d;
+    --series:#8fbfa8; --series-soft:#25392f; --tab-ativa:#3d6b5c;
     --grid:#2c2c2a; --baseline:#383835; --axis:#898781; --contorno:#ffffff;
-    --up:#0ca30c; --down:#e86b66;
+    --up:#7fd18c; --down:#e88a7a;
   }
   * { box-sizing:border-box }
   body { margin:0; background:var(--page); color:var(--ink);
@@ -841,6 +841,9 @@ PAGE = r"""<!doctype html>
                            white-space:normal }
   .painel td.num, .painel th.num { white-space:nowrap }
   .painel .rola { overflow-x:auto; margin:0 -4px; padding:0 4px }
+  /* nome de editor é um token só; sem quebrar, empurra a tabela do painel
+     para fora do card (vazava o 'Chegaram na janela' em telas estreitas). */
+  .painel td.ed { overflow-wrap:anywhere }
   .painel td.quebra { white-space:normal; min-width:110px;
                       overflow-wrap:anywhere }
   @media (max-width:620px) { .painel td.quebra { min-width:0 } }
@@ -912,6 +915,43 @@ PAGE = r"""<!doctype html>
   footer p { margin:.45em 0 }
   code { background:var(--chip); padding:1px 5px; border-radius:4px; font-size:.9em }
   .empty { padding:28px; text-align:center; color:var(--muted) }
+
+  /* --- Identidade visual (direcao Atlas) ------------------------------------
+     So estetica, e so com fonte do sistema (nenhuma requisicao externa). Nao
+     toca nas variaveis dos mapas (--grid/--baseline/--axis/--contorno), na
+     rampa de calor nem no texto dos paineis. Serifa no titulo e nos numeros,
+     humanista no corpo, versalete de rotulo de carta nos rotulos, fios finos
+     no lugar de cartoes, e curvas de nivel no cabecalho. */
+  :root { --hum:"Gill Sans","Gill Sans MT",Seravek,Optima,Candara,"Trebuchet MS","Liberation Sans",sans-serif;
+          --serif:ui-serif,Charter,"Bitstream Charter",Georgia,"Noto Serif",serif }
+  body { font-family:var(--hum); font-size:15px }
+  .wrap { padding-top:30px }
+  .topo { padding:20px 22px 18px; margin-bottom:22px; border:1px solid var(--ink);
+          outline:1px solid var(--ink); outline-offset:3px;
+          background:repeating-radial-gradient(circle at 88% 30%, transparent 0 15px,
+            color-mix(in srgb, var(--series) 14%, transparent) 15px 16px), var(--card) }
+  h1 { font-family:var(--serif); font-size:clamp(1.7rem,4.2vw,2.55rem);
+       font-weight:700; letter-spacing:.01em }
+  .sub { font-variant-caps:all-small-caps; letter-spacing:.12em; font-size:1.02rem;
+         margin-top:6px }
+  .tema, .tab, input, select, .tablewrap, .painel, .chip { border-radius:2px }
+  .kpis { gap:14px }
+  .kpi { border-radius:2px; border:none; border-left:6px solid var(--series);
+         padding:10px 14px }
+  .kpi b { font-family:var(--serif); font-size:1.9rem;
+           font-variant-numeric:lining-nums tabular-nums }
+  .kpi span { font-variant-caps:all-small-caps; letter-spacing:.12em; font-size:.98rem }
+  .tab { font-variant-caps:all-small-caps; letter-spacing:.1em; font-size:1rem }
+  .tab[aria-selected="true"] { color:#fff }
+  th { font-variant-caps:all-small-caps; text-transform:none; letter-spacing:.12em;
+       font-size:.92rem }
+  .name { font-family:var(--serif) }
+  h2 { font-variant-caps:all-small-caps; text-transform:none; letter-spacing:.16em;
+       font-size:1.02rem; color:var(--ink); border-bottom:1px solid var(--line);
+       padding-bottom:6px }
+  .barra > span:first-child { font-family:var(--serif); font-style:italic }
+  .barra .t, .barra .f { border-radius:1px }
+  footer { font-family:var(--serif) }
 </style>
 
 <div class="wrap">
@@ -1637,7 +1677,7 @@ function paineis() {
     <th class="num" title="Quanto essa pessoa já produziu desde que começou, dentro da janela.">${D.cfg.janela} d</th>
     </tr></thead><tbody>
     ${p.novatos.map(([u, uf, desde, ed, vivo]) => `<tr>
-      <td>${link(u)} <span class="chip">${uf || "--"}</span>${
+      <td class="ed">${link(u)} <span class="chip">${uf || "--"}</span>${
         vivo ? "" : ` <span class="chip" title="Não editou nos últimos ${D.cfg.recenteDias} dias.">parou</span>`}</td>
       <td class="num">${desde.slice(8,10)}/${desde.slice(5,7)}</td>
       <td class="num">${NF.format(ed)}</td></tr>`).join("")}
