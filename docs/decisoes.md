@@ -253,6 +253,12 @@ o cartão vazava em 390 e 768px. A auditoria só enxerga o que está na página 
 você entrega a ela — teste com a ordem de grandeza real, que está na tabela
 mais abaixo.
 
+Voltou a acontecer em 24/10/2026, no painel "Chegaram na janela": nome real de
+estreante é um token só e comprido, empurrava a tabela para fora do card, e a
+página rolava de lado no celular. Os nomes sintéticos são curtos e não pegavam.
+O que pegou foi rodar o auditor contra a página do ar, com dado real. O conserto
+foi deixar o nome quebrar, como a tabela principal já fazia.
+
 ---
 
 ## Caminhos testados e descartados
@@ -333,6 +339,17 @@ informa nada e, numa página de comunidade, só desanima. Entraram as duas
 réguas: a mediana parte a lista ao meio, que é onde a pergunta "sou típico?" se
 responde, e a distância até a média mostra a concentração sem precisar dizer.
 
+**Painel de "onde se edita sem gerente ativo".** Era a ideia mais forte entre as
+que não custam requisição: cruzar o mapa de atividade com o de cobertura e
+apontar onde se edita sem ninguém responsável. Medido na coleta de 21/10/2026
+antes de construir: das 354 células com edição recente, nenhuma estava sem
+gerente ativo, e nenhuma dependia de um só — 64% das edições recentes caíram
+onde 10 ou mais gerentes ativos se sobrepõem. O painel mostraria zero toda vez,
+e a variante "onde a edição depende de um único gerente" deu o mesmo zero. Onde
+se edita, a cobertura é redundante. Se houver fragilidade, ela está no que esta
+fonte não vê: a área de quem parou de editar só aparece coletando as áreas dos
+inativos, que é o item "áreas órfãs" em "Não explorado".
+
 ---
 
 ## Ordens de grandeza
@@ -402,6 +419,16 @@ texto literal, o link vai percent-encoded, e a página não ganha nenhuma tag
 **A página não fala com ninguém.** Nenhuma requisição sai para fora ao abrir,
 trocar de aba, filtrar ou trocar de tema: nada de fonte remota, analytics ou
 CDN. Só fontes de sistema. Vale conferir de novo se alguém adicionar biblioteca.
+
+Isso vale para o arquivo que o `placar.py` gera, não necessariamente para o que
+o domínio serve. Em 24/10/2026 o domínio estava atrás da Cloudflare com o Rocket
+Loader ligado: ele troca o `type` dos scripts da página por um que o navegador
+não executa e só os roda pelo script dele, injetado no fim. Sem esse script a
+página fica vazia — sem KPIs, tabela nem painéis —, o que foi reproduzido
+abrindo a página do ar como arquivo local. Quem bloquear o script da Cloudflare
+vê a página em branco, e o script que evita o piscar de tema, que precisa rodar
+antes da pintura, fica preso até o carregador do fim. Conferir o arquivo não
+basta: confira também o que o domínio entrega.
 
 **Teclado e leitor de tela.** A ordem do Tab é a visual, todo controle tem foco
 visível e nome acessível, e Enter aciona abas e o botão de tema.
